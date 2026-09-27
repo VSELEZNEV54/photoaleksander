@@ -1,0 +1,14 @@
+# системное
+.DS_Store
+__pycache__/
+*.pyc
+.claude/
+
+# рабочая папка: в репозиторий идут только брифы, SEO-план, спецификация и скрипт скриншотов
+_work/*
+!_work/brief.md
+!_work/brief-v2.md
+!_work/build-spec.md
+!_work/seo-plan.md
+!_work/seo-plan.json
+!_work/shot.mjs

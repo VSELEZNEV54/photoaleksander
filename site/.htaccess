@@ -1,0 +1,5 @@
+# 301-редиректы со старых адресов (генерирует build.py из config.json → redirects)
+<IfModule mod_alias.c>
+  RedirectMatch 301 ^/comments(/|/index\.html)?$ /otzyvy/
+</IfModule>
+ErrorDocument 404 /404.html

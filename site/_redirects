@@ -1,0 +1,4 @@
+# 301-редиректы со старых адресов (Netlify, Cloudflare Pages; генерирует build.py из config.json → redirects)
+/comments /otzyvy/ 301
+/comments/ /otzyvy/ 301
+/comments/index.html /otzyvy/ 301

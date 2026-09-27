@@ -1,0 +1,271 @@
+{
+  "site_url": "https://anphotolab.ru",
+  "base_path_404": "/",
+  "lang": "ru",
+  "brand": "ANPhotoLab",
+  "tagline": "Event-фотограф и видеограф в Новосибирске",
+  "signature": "A.Nepomnyaschikh | Photo&Video Lab",
+  "motto": "Факты событий и честные эмоции.",
+  "city": "Новосибирск",
+  "person": {
+    "name": "Александр Непомнящих",
+    "latin": "A. Nepomnyaschikh",
+    "job_title": "Фотограф и видеограф"
+  },
+  "contacts": {
+    "phone_display": "+7 (953) 864-99-79",
+    "phone_href": "tel:+79538649979",
+    "phone_schema": "+7-953-864-99-79",
+    "messenger_display": "+7 (952) 942-77-87",
+    "telegram": "https://t.me/hoonigan866",
+    "whatsapp": "https://wa.me/79529427787",
+    "telegram_handle": "@hoonigan866"
+  },
+  "fonts_css": "https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&family=JetBrains+Mono:wght@500&family=Sofia+Sans+Extra+Condensed:wght@300;800&display=swap",
+  "theme_color": "#0B0A09",
+  "counters": {
+    "yandex_metrika_id": "",
+    "google_site_verification": "",
+    "yandex_verification": ""
+  },
+  "genres": [
+    {
+      "key": "svadby",
+      "slug": "/svadby/",
+      "name": "Свадьбы",
+      "single": "Свадьба",
+      "cat": "История любви",
+      "desc": "История любви в искренних кадрах. Трепетные моменты и эмоции этого дня — навсегда."
+    },
+    {
+      "key": "reportazh",
+      "slug": "/reportazh/",
+      "name": "Репортаж",
+      "single": "Репортаж",
+      "cat": "Хроника событий",
+      "desc": "Хроника ваших событий: главные моменты, люди и эмоции — без постановок."
+    },
+    {
+      "key": "portrety",
+      "slug": "/portrety/",
+      "name": "Портреты",
+      "single": "Портрет",
+      "cat": "Характер и стиль",
+      "desc": "Искренность и стиль. Образ, который подчеркнёт вашу индивидуальность и характер."
+    },
+    {
+      "key": "avtomobili",
+      "slug": "/avtomobili/",
+      "name": "Автомобили",
+      "single": "Съёмка автомобиля",
+      "cat": "Снимки, которые продают",
+      "desc": "Снимки, которые продают, и кадры, которые вдохновляют. Всё для вашего автомобиля."
+    },
+    {
+      "key": "vypusknye",
+      "slug": "/vypusknye/",
+      "name": "Выпускные",
+      "single": "Выпускной",
+      "cat": "Финал школьной эпохи",
+      "desc": "Яркий финал школьной эпохи. Живые эмоции, портреты и общие кадры без скучных построений."
+    },
+    {
+      "key": "kontserty",
+      "slug": "/kontserty/",
+      "name": "Концерты",
+      "single": "Концерт",
+      "cat": "Энергия сцены",
+      "desc": "Энергия сцены в каждом кадре: драйв выступления, эмоции артистов и реакция зала."
+    },
+    {
+      "key": "korporativy",
+      "slug": "/korporativy/",
+      "name": "Корпоративы",
+      "single": "Корпоратив",
+      "cat": "Команда в лучшем свете",
+      "desc": "Команда в лучшем свете: драйв вечеринки, награждения и искренние моменты отдыха коллег."
+    }
+  ],
+  "genre_labels": {
+    "hero": "Обложка",
+    "author": "Автор"
+  },
+  "pages": [
+    {
+      "slug": "/",
+      "label": "Главная",
+      "type": "home"
+    },
+    {
+      "slug": "/reportazh/",
+      "label": "Репортаж",
+      "type": "genre"
+    },
+    {
+      "slug": "/korporativy/",
+      "label": "Корпоративы",
+      "type": "genre"
+    },
+    {
+      "slug": "/vypusknye/",
+      "label": "Выпускные",
+      "type": "genre"
+    },
+    {
+      "slug": "/kontserty/",
+      "label": "Концерты",
+      "type": "genre"
+    },
+    {
+      "slug": "/portrety/",
+      "label": "Портреты",
+      "type": "genre"
+    },
+    {
+      "slug": "/svadby/",
+      "label": "Свадьбы",
+      "type": "genre"
+    },
+    {
+      "slug": "/avtomobili/",
+      "label": "Автомобили",
+      "type": "genre"
+    },
+    {
+      "slug": "/uslugi/",
+      "label": "Услуги",
+      "type": "service"
+    },
+    {
+      "slug": "/otzyvy/",
+      "label": "Отзывы",
+      "type": "service"
+    },
+    {
+      "slug": "/about/",
+      "label": "Обо мне",
+      "type": "service"
+    },
+    {
+      "slug": "/contacts/",
+      "label": "Контакты",
+      "type": "service"
+    },
+    {
+      "slug": "/fotograf-na-konferentsiyu/",
+      "label": "Конференции и форумы",
+      "type": "seo",
+      "genre": "korporativy"
+    },
+    {
+      "slug": "/fotograf-na-vystavku/",
+      "label": "Выставки",
+      "type": "seo",
+      "genre": "reportazh"
+    },
+    {
+      "slug": "/videosemka-meropriyatiy/",
+      "label": "Видеосъёмка",
+      "type": "seo",
+      "genre": "reportazh"
+    },
+    {
+      "slug": "/fotograf-na-den-rozhdeniya/",
+      "label": "Дни рождения и юбилеи",
+      "type": "seo",
+      "genre": "reportazh"
+    },
+    {
+      "slug": "/fotograf-v-klub/",
+      "label": "Клубы и вечеринки",
+      "type": "seo",
+      "genre": "kontserty"
+    },
+    {
+      "slug": "/novogodniy-korporativ/",
+      "label": "Новогодний корпоратив",
+      "type": "seo",
+      "genre": "korporativy"
+    },
+    {
+      "slug": "/biznes-portret/",
+      "label": "Бизнес-портрет",
+      "type": "seo",
+      "genre": "portrety"
+    },
+    {
+      "slug": "/foto-avto-dlya-prodazhi/",
+      "label": "Фото авто для продажи",
+      "type": "seo",
+      "genre": "avtomobili"
+    },
+    {
+      "slug": "/posledniy-zvonok/",
+      "label": "Последний звонок",
+      "type": "seo",
+      "genre": "vypusknye"
+    },
+    {
+      "slug": "/fotograf-v-zags/",
+      "label": "Съёмка в ЗАГСе",
+      "type": "seo",
+      "genre": "svadby"
+    }
+  ],
+  "header_nav": [
+    {
+      "label": "Направления",
+      "href": "/#napravleniya"
+    },
+    {
+      "label": "Работы",
+      "href": "/#raboty"
+    },
+    {
+      "label": "Кейсы",
+      "href": "/#keysy"
+    },
+    {
+      "label": "Контакты",
+      "href": "/contacts/"
+    }
+  ],
+  "menu_extra": [
+    "/uslugi/",
+    "/otzyvy/",
+    "/about/",
+    "/contacts/"
+  ],
+  "footer": {
+    "events_title": "События",
+    "events": [
+      "/fotograf-na-konferentsiyu/",
+      "/novogodniy-korporativ/",
+      "/fotograf-v-klub/",
+      "/biznes-portret/",
+      "/posledniy-zvonok/",
+      "/fotograf-na-den-rozhdeniya/",
+      "/fotograf-na-vystavku/",
+      "/videosemka-meropriyatiy/",
+      "/fotograf-v-zags/",
+      "/foto-avto-dlya-prodazhi/"
+    ],
+    "sections_title": "Разделы",
+    "sections": [
+      "/uslugi/",
+      "/otzyvy/",
+      "/about/",
+      "/contacts/"
+    ]
+  },
+  "redirects": [
+    {
+      "from": "/comments/",
+      "to": "/otzyvy/"
+    }
+  ],
+  "city_in": "Новосибирске",
+  "same_as": [
+    "https://t.me/hoonigan866"
+  ]
+}
