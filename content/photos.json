@@ -132,12 +132,12 @@
   },
   {
    "id": 10,
-   "genre": "korporativy",
+   "genre": "reportazh",
    "orientation": "landscape",
    "ratio": 1.5,
    "w": 1280,
    "h": 853,
-   "alt": "Командное фото участников мероприятия с баннером",
+   "alt": "Общее фото болельщиков с баннерами в зоне прилёта",
    "thumb": "https://i.wfolio.ru/x/FXJyHQVcwzk4XV-FnYHo0r9l86Lpt817/MOyxBEyW_CVHQHxcRDzEI6ocPuu5hgB7/JgowCkG57CxluzJAUGHrIsVNySAdLyMV/xrNp021mT-zchDcqo71OzyMJH9x0kfUD/4Ejae6F2_IbCvJq8fHaIog.jpg",
    "mid": "https://i.wfolio.ru/x/cXPZPmu9lCw5tkRNat7JtyHjrPiZiclN/VJgIrluFLtZWGwzaT5FJ07DuSK__bTQA/_92oc8L69LBVV0y7d2Mxe5juhg6wJjro/ReWkbWMQ4scETP-njFvpMREUflF0870d/kBvlik4yAUBqtODM39u7VQ.jpg",
    "large": "https://i.wfolio.ru/x/zfNWg0RActCaYvCdP8NS6h3QcKqIOO7I/oVCmpsR2A0_zCBuWQbm7dJYwNQ6ysoqE/fn3Nn00lKjyAA-IsLJUA-wc_ume_oOAK/0wF8ccac4ljI6sCv6pjb-otMjewElB0n/R6Z_H9dnbK-Z8r2k3MavLg.jpg"
@@ -276,12 +276,12 @@
   },
   {
    "id": 22,
-   "genre": "korporativy",
+   "genre": "reportazh",
    "orientation": "landscape",
    "ratio": 1.5,
    "w": 1280,
    "h": 853,
-   "alt": "Участники мероприятия с флагами и баннером",
+   "alt": "Болельщики с флагами и баннерами встречают чемпиона в аэропорту",
    "thumb": "https://i.wfolio.ru/x/FXJyHQVcwzk4XV-FnYHo0r9l86Lpt817/MOyxBEyW_CVHQHxcRDzEI6ocPuu5hgB7/vvX_ecr4TpI3SMxJcUfWHaqnd4VeyH3Z/BRV4n_9yNBOVzIJKfB7-qy73JzdpRdAD/Ha9RGV4K2iCVzgyQr0Rruw.jpg",
    "mid": "https://i.wfolio.ru/x/cXPZPmu9lCw5tkRNat7JtyHjrPiZiclN/VJgIrluFLtZWGwzaT5FJ07DuSK__bTQA/FWsnzxWJi7j7R44INkH98UQKI4qkpBY4/fU9e0XNI0pcmx2vM4yNf-qC-fuiNxLF-/p1LgVWPjzuOagQjqP8yN4w.jpg",
    "large": "https://i.wfolio.ru/x/zfNWg0RActCaYvCdP8NS6h3QcKqIOO7I/oVCmpsR2A0_zCBuWQbm7dJYwNQ6ysoqE/j9_hXl6bH6rrO-Z_GQH8z_LSG_8ofqAM/Y57frx4P8uegVcr4sWEFJtq-ctQEi5iX/oZCld31QAM1jGBVsSfDoNw.jpg"

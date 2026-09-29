@@ -1,0 +1,24 @@
+{
+  "_comment": "Альбомы съёмок по жанрам. demo:true — демо-группировка из старого портфолио; заменить реальными (имена, фото) — см. content/TODO-facts.md и tools/add_album.py",
+  "albums": [
+    {"genre": "svadby", "slug": "svadebnaya-progulka", "title": "Свадебная прогулка", "subtitle": "Жених и невеста · балкон среди зелени", "year": null, "cover": 1, "photos": [1], "text": "", "demo": true},
+    {"genre": "reportazh", "slug": "vstrecha-chempiona", "title": "Встреча чемпиона в аэропорту", "subtitle": "Зона прилёта · болельщики, пояс, интервью", "year": null, "cover": 2, "photos": [2, 47, 22, 25, 12, 42, 18, 40, 10], "text": "", "demo": true},
+    {"genre": "reportazh", "slug": "delovoy-priyom", "title": "Деловой приём", "subtitle": "Зал с золотой отделкой · гости и общение", "year": null, "cover": 73, "photos": [73, 67, 86], "text": "", "demo": true},
+    {"genre": "reportazh", "slug": "ekskursiya-dlya-shkolnikov", "title": "Экскурсия для школьников", "subtitle": "Ведущая и школьники · выставочный зал", "year": null, "cover": 89, "photos": [89, 45, 39], "text": "", "demo": true},
+    {"genre": "portrety", "slug": "studiya-belyy-fon", "title": "Студийная съёмка", "subtitle": "Белый фон · образы в чёрном", "year": null, "cover": 30, "photos": [30, 38, 20, 36, 60, 17, 43, 50], "text": "", "demo": true},
+    {"genre": "portrety", "slug": "zakat-u-vody", "title": "Закат у воды", "subtitle": "Прогулочная съёмка · золотой час", "year": null, "cover": 82, "photos": [82, 52, 54, 59, 80], "text": "", "demo": true},
+    {"genre": "portrety", "slug": "v-oranzheree", "title": "Портреты в оранжерее", "subtitle": "Зелень · мягкий свет", "year": null, "cover": 19, "photos": [19, 72, 56, 51], "text": "", "demo": true},
+    {"genre": "portrety", "slug": "portret-u-okna", "title": "Портрет у окна", "subtitle": "Интерьер · естественный свет", "year": null, "cover": 41, "photos": [41, 11, 24], "text": "", "demo": true},
+    {"genre": "portrety", "slug": "tsvetnoy-svet", "title": "Цветной свет", "subtitle": "Подборка · низкий ключ, неон и эксперименты", "year": null, "cover": 44, "photos": [44, 84, 68, 3, 58, 34], "text": "", "demo": true},
+    {"genre": "avtomobili", "slug": "avto-na-zakate", "title": "Авто на закате", "subtitle": "Лесная дорога · закатный свет", "year": null, "cover": 4, "photos": [4], "text": "", "demo": true},
+    {"genre": "vypusknye", "slug": "vypusknoy-nachalnoy-shkoly", "title": "Выпускной начальной школы", "subtitle": "Актовый зал, коридоры, праздник в классе", "year": null, "cover": 29, "photos": [29, 14, 26, 8, 15, 74, 49, 13], "text": "", "demo": true},
+    {"genre": "vypusknye", "slug": "vypusknoy-11-klassa", "title": "Выпускной 11 класса", "subtitle": "Фотосессия в библиотеке · дипломы и медали", "year": null, "cover": 16, "photos": [16, 55, 65, 21, 23, 48, 53, 31], "text": "", "demo": true},
+    {"genre": "vypusknye", "slug": "vypusknye-podborka", "title": "Выпускные: подборка", "subtitle": "Общее фото на берегу, аудитория, портреты", "year": null, "cover": 5, "photos": [5, 28, 35], "text": "", "demo": true},
+    {"genre": "kontserty", "slug": "dzhazovyy-vecher", "title": "Джазовый вечер", "subtitle": "Концертный зал · вокал и биг-бэнд", "year": null, "cover": 87, "photos": [87, 27, 57, 69, 62, 88], "text": "", "demo": true},
+    {"genre": "kontserty", "slug": "stsena-i-vokal", "title": "Сцена и вокал", "subtitle": "Подборка · трио, ч/б кадр, школьный концерт", "year": null, "cover": 6, "photos": [6, 64, 71], "text": "", "demo": true},
+    {"genre": "korporativy", "slug": "kruglyy-stol", "title": "Круглый стол", "subtitle": "Заседание · зал с микрофонами", "year": null, "cover": 9, "photos": [9, 33, 77, 92, 66], "text": "", "demo": true},
+    {"genre": "korporativy", "slug": "vstrecha-s-ekspertom", "title": "Встреча с экспертом", "subtitle": "Лаунж-зона · выступление и общение", "year": null, "cover": 37, "photos": [37, 83, 78, 79, 90], "text": "", "demo": true},
+    {"genre": "korporativy", "slug": "lektsiya-v-universitete", "title": "Лекция в университете", "subtitle": "Большая аудитория · выступление у экрана", "year": null, "cover": 76, "photos": [76, 70, 85, 63], "text": "", "demo": true},
+    {"genre": "korporativy", "slug": "delovye-vstrechi", "title": "Деловые встречи", "subtitle": "Зал, спикеры, панельная дискуссия, награждение", "year": null, "cover": 61, "photos": [61, 46, 91, 81, 32, 75], "text": "", "demo": true}
+  ]
+}

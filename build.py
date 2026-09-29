@@ -6,7 +6,12 @@ ANPhotoLab v2 «Проявочная» — генератор статическ
     python3 build.py                                  полная сборка: site/ очищается и собирается заново
     python3 build.py --check content/pages/x.json     проверить одну страницу, ничего не записывая
     python3 build.py --only x                         собрать одну страницу (content/pages/x.json) без очистки site/
+                                                      (жанровую — вместе со страницами её альбомов)
+    python3 build.py --check content/albums.json      проверить альбомы съёмок и собрать их страницы в памяти
     python3 build.py --strict                         полная сборка, любая ошибка — сборка не записывается
+
+Альбомы съёмок (бриф v3 §3): content/albums.json → блок albums на жанровых страницах и страницы /<жанр>/<альбом>/
+(AlbumCtx). Реальный альбом из папки с фото — tools/add_album.py.
 
 Результат — папка site/ с чистыми HTML/CSS/JS. Все внутренние ссылки и пути к ассетам относительные
 с явным index.html, поэтому сайт открывается двойным кликом по site/index.html (file://) и работает
@@ -40,6 +45,14 @@ FIT_MAX_WORD = 0.4         # огромное слово первого экра
 FIT_MAX_404 = 0.34
 PHOTO_DIR = "assets/img/photos"            # локальные AVIF/WebP (делает tools/photos.py), путь внутри src/ и site/
 PHOTO_WIDTHS = (640, 1280, 1920)
+ALBUMS_FILE = CONTENT / "albums.json"      # альбомы съёмок по жанрам (бриф v3 §3), формат — content/BLOCKS.md → «Альбомы»
+ALBUM_DIR = "assets/img/albums"            # локальные кадры альбомов (делает tools/add_album.py): src/assets/img/albums/<жанр>/<slug>/
+ALBUM_THUMB = "-800"                       # превью кадра рядом с ним: 01.jpg → 01-800.jpg (800 px по длинной стороне)
+ALBUM_MIN_COUNT_SHOWN = 2                  # «N кадров» в мете альбома — от двух: «1 кадр» выдаёт тонкое портфолио
+ALBUM_LD_MAX = 60                          # сколько кадров альбома перечислять в JSON-LD ImageGallery
+SECTION_META = False       # v3 «аккуратнее»: правые мета-подписи в шапках секций («04 истории», «Нажмите — откроется крупно»)
+HERO_FACTS = False         # v3 «аккуратнее»: моно-факты справа от крошек в первом экране («22 кадра · Новосибирск · Стоимость — по запросу»)
+                           # не выводятся — поле meta в JSON допустимо, но молчит. True — вернуть подписи
 LOADER = True              # лоадер «Проявка» (лампа + счётчик 000→100) при первом визите за сессию; False — сразу короткое появление
 TRANSITIONS = True         # шторка между страницами и появление при повторной загрузке; False — выключает всё, включая лоадер
                            # (README → «Загрузка и переходы»; длительности — объект PT в src/assets/js/main.js)
@@ -185,14 +198,17 @@ def _spec(req=None, opt=None, section=True):
 BLOCK_SPECS = {
     "hero-person": _spec({"photo": "int"}, {"name": "list", "tags": "list", "labels": "list", "lead": "str", "actions": "list",
                                             "meta": "list", "focus": "str", "messengers": "bool"}, section=False),
+    "contact-hero": _spec({}, {"word": "str", "photo": "int", "lead": "str", "focus": "str", "focus_mobile": "str",
+                               "tg_label": "str", "items": "list"}, section=False),
     "genre-hero": _spec({}, {"word": "str", "eyebrow": "str", "photo": "int", "variant": "str", "lead": "str",
                              "facts": "list", "actions": "list", "focus": "str", "focus_mobile": "str",
                              "caption": "str"}, section=False),
     "genre-tabs": _spec({}, {"active": "str", "label": "str"}, section=False),
     "directions": _spec({}, {"items": "list", "previews": "dict"}),
-    "related-directions": _spec({"items": "list"}, {"layout": "str"}),
+    "related-directions": _spec({"items": "list"}, {"layout": "str", "columns": "int"}),
     "gallery": _spec({}, {"genre": "str", "ids": "list", "exclude": "list", "limit": "int", "layout": "str",
                           "min": "int", "end": "dict", "group": "str", "solo_note": "str"}),
+    "albums": _spec({}, {"genre": "str", "items": "list", "columns": "int", "ratio": "str", "limit": "int"}),
     "stats": _spec({"items": "list"}, {"text": "str", "link": "dict"}),
     "cases": _spec({"items": "list"}, {}),
     "marquee": _spec({}, {"ids": "list", "items": "list", "link": "dict", "speed": "num", "label": "str"}, section=False),
@@ -219,7 +235,11 @@ V1_BLOCKS = {
     "related": "related-directions",
 }
 
-HEROES = ("hero-person", "genre-hero")
+HEROES = ("hero-person", "genre-hero", "contact-hero", "album-hero")
+
+# Служебные блоки страницы альбома (/<жанр>/<альбом>/): их собирает генератор из content/albums.json,
+# в JSON-страницах их нет. Значение — id секции по умолчанию
+INTERNAL_BLOCKS = {"album-hero": "top", "album-gallery": "kadry", "album-nav": "dalshe"}
 
 PAGE_FIELDS = {"slug": "str", "type": "str", "genre": "str", "nav": "str", "title": "str", "description": "str",
                "h1": "str", "og_image": "int", "parent": "str", "service": "str", "noindex": "bool",
@@ -227,8 +247,8 @@ PAGE_FIELDS = {"slug": "str", "type": "str", "genre": "str", "nav": "str", "titl
 PAGE_REQUIRED = ["slug", "type", "title", "description", "h1", "blocks"]
 PAGE_TYPES = ("home", "genre", "seo", "service")
 
-DEFAULT_IDS = {"hero-person": "top", "genre-hero": "top", "genre-tabs": "zhanry", "directions": "napravleniya",
-               "related-directions": "drugie", "gallery": "kadry", "stats": "opyt", "cases": "keysy",
+DEFAULT_IDS = {"hero-person": "top", "genre-hero": "top", "contact-hero": "top", "genre-tabs": "zhanry", "directions": "napravleniya",
+               "related-directions": "drugie", "gallery": "kadry", "albums": "syomki", "stats": "opyt", "cases": "keysy",
                "marquee": "lenta-otzyvov", "points": "kak-snimayu", "formats": "formaty", "faq": "voprosy",
                "seo-text": "podrobnee", "text": "tekst", "quote": "citata", "reviews": "otzyvy", "lead-form": "zayavka"}
 
@@ -289,6 +309,217 @@ class Site:
         self.local = self.scan_local_photos()
         self.pages = {}       # slug -> dict(name, path, data)
         self.page_errors = {}  # name -> message (не читается JSON)
+        self.load_albums()
+
+    # ------------------------------------------------------------------ альбомы съёмок (content/albums.json)
+    ALBUM_FIELDS = {"genre": "str", "slug": "str", "title": "str", "subtitle": "any", "year": "any", "cover": "any",
+                    "photos": "list", "text": "any", "demo": "bool", "description": "any", "_comment": "any"}
+    FRAME_FIELDS = {"src": "str", "thumb": "str", "w": "int", "h": "int", "alt": "str", "focus": "str"}
+
+    def load_albums(self, path=None):
+        """Читает content/albums.json и проверяет каждый альбом: жанр, slug, кадры (id из photos.json своего жанра
+        или локальный файл {"src", "w", "h", "alt"}), дубли, обложку. Альбом с ошибкой не выводится — ни в сетке жанра,
+        ни отдельной страницей (сообщение — в отчёте «content/albums.json»). Результат: self.albums — проверенные альбомы
+        в порядке файла, self.album_rep — отчёт, self.album_bad — {жанр: [slug альбомов с ошибками]}."""
+        path = Path(path) if path else ALBUMS_FILE
+        name = str(path.relative_to(ROOT)) if str(path).startswith(str(ROOT)) else str(path)
+        rep = self.album_rep = Report(name)
+        self.albums, self.album_bad = [], {}
+        self.album_by_slug = {}
+        if not path.exists():
+            rep.note("файла нет — альбомов нет: блок albums на жанровых страницах будет скрыт")
+            return
+        try:
+            doc = load_json(path)
+        except ValueError as e:
+            rep.err("", str(e))
+            return
+        if not isinstance(doc, dict) or not isinstance(doc.get("albums"), list):
+            rep.err("", 'файл — объект {"albums": [ {…}, {…} ]}')
+            return
+        for k in doc:
+            if k not in ("albums", "_comment"):
+                rep.warn("", "неизвестное поле «{}» — будет проигнорировано".format(k))
+        pairs, used = {}, {}
+        for i, a in enumerate(doc["albums"]):
+            before = len(rep.errors)
+            al = self.parse_album(a, i, rep, pairs, used)
+            if al and len(rep.errors) == before:
+                self.albums.append(al)
+                self.album_by_slug[al["slug"]] = al
+            elif isinstance(a, dict) and isinstance(a.get("genre"), str):
+                self.album_bad.setdefault(a["genre"], []).append(str(a.get("slug") or "#{}".format(i)))
+        by_genre = {}
+        for al in self.albums:
+            by_genre.setdefault(al["genre"], []).append(al)
+        demo = sum(1 for al in self.albums if al["demo"])
+        rep.note("альбомов: {} ({}), из них демо: {} — заменить реальными (content/TODO-facts.md)".format(
+            len(self.albums), ", ".join("{} {}".format(g, len(v)) for g, v in by_genre.items()) or "—", demo))
+        # кадры жанра, которые не попали ни в один альбом (не ошибка: например, дубль серии убран намеренно)
+        for g in self.genre_by_key:
+            inside = {pk for al in by_genre.get(g, []) for pk in (photo_key(x["_p"]) for x in al["frames"])}
+            out = [p["id"] for p in self.genre_photos(g) if p["id"] not in inside]
+            if by_genre.get(g) and out:
+                rep.note("{}: кадры жанра вне альбомов — {}".format(g, ", ".join(map(str, out))))
+            if not by_genre.get(g):
+                rep.note("{}: альбомов нет — на странице жанра блок albums будет скрыт".format(g))
+
+    def parse_album(self, a, i, rep, pairs, used):
+        w = "albums[{}]".format(i)
+        if not isinstance(a, dict):
+            rep.err(w, "альбом — объект {\"genre\", \"slug\", \"title\", \"photos\": [...]}")
+            return None
+        if isinstance(a.get("genre"), str) and isinstance(a.get("slug"), str):
+            w = "albums[{}] {}/{}".format(i, a["genre"], a["slug"])
+        for f, v in a.items():
+            if f not in self.ALBUM_FIELDS:
+                rep.warn(w, "неизвестное поле «{}» — будет проигнорировано".format(f))
+            elif not TYPE_CHECK[self.ALBUM_FIELDS[f]](v):
+                rep.err(w, "поле «{}» должно быть: {}".format(f, TYPE_NAMES[self.ALBUM_FIELDS[f]]))
+        for f in ("genre", "slug", "title", "photos"):
+            if f not in a:
+                rep.err(w, "нет обязательного поля «{}»".format(f))
+        gk = a.get("genre")
+        g = self.genre_by_key.get(gk) if isinstance(gk, str) else None
+        if isinstance(gk, str) and not g:
+            rep.err(w + ".genre", "нет жанра «{}» (есть: {})".format(gk, ", ".join(self.genre_by_key)))
+        slug = a.get("slug")
+        if isinstance(slug, str) and not re.match(r"^[a-z0-9]+(?:-[a-z0-9]+)*$", slug):
+            rep.err(w + ".slug", "slug — латиница, цифры и дефис: «ivan-i-anna» (сейчас «{}»)".format(slug))
+        title = a.get("title")
+        if isinstance(title, str) and not title.strip():
+            rep.err(w + ".title", "пустое название альбома")
+        if g and isinstance(slug, str):
+            if (gk, slug) in pairs:
+                rep.err(w + ".slug", "альбом {}/{} уже есть (albums[{}]) — slug внутри жанра не повторяется".format(gk, slug, pairs[(gk, slug)]))
+            pairs[(gk, slug)] = i
+        for f in ("subtitle", "description"):
+            if f in a and a[f] is not None and not isinstance(a[f], str):
+                rep.err(w + "." + f, "строка или null")
+        year = a.get("year")
+        if year is not None and (isinstance(year, bool) or not isinstance(year, int) or not 1990 <= year <= 2100):
+            rep.err(w + ".year", "год — число (2025) или null")
+        text = a.get("text")
+        if text not in (None, "") and not (isinstance(text, str) or (isinstance(text, list) and all(isinstance(x, str) for x in text))):
+            rep.err(w + ".text", "текст — строка или массив строк (абзацы)")
+        photos = a.get("photos")
+        if not isinstance(photos, list):
+            return None
+        if not photos:
+            rep.err(w + ".photos", "пустой альбом: нужен хотя бы один кадр")
+            return None
+        frames, seen = [], set()
+        for k, x in enumerate(photos):
+            wk = "{}.photos[{}]".format(w, k)
+            fr = self.parse_frame(x, wk, rep, gk if g else None, a, k)
+            if not fr:
+                continue
+            key = photo_key(fr["_p"])
+            if key in seen:
+                rep.err(wk, "кадр {} повторяется в альбоме".format(frame_label(fr["_p"])))
+                continue
+            seen.add(key)
+            if key in used and used[key] != w:
+                rep.warn(wk, "кадр {} уже есть в альбоме {} — один кадр лучше держать в одной съёмке".format(frame_label(fr["_p"]), used[key]))
+            used.setdefault(key, w)
+            frames.append(fr)
+        if not frames or not g or not isinstance(slug, str) or not isinstance(title, str):
+            return None
+        cover = frames[0]
+        cv = a.get("cover")
+        if cv is not None:
+            if isinstance(cv, bool) or not isinstance(cv, (int, str)):
+                rep.err(w + ".cover", "обложка — id кадра (число) или путь src локального кадра этого альбома")
+            else:
+                if isinstance(cv, str):
+                    cv = cv.lstrip("/")
+                hit = next((f for f in frames if (f["_p"].get("id") == cv if isinstance(cv, int) else f["_p"].get("src") == cv)), None)
+                if hit:
+                    cover = hit
+                elif isinstance(cv, int) and cv in self.photos:
+                    rep.err(w + ".cover", "кадр {} — не из этого альбома: обложка берётся из его кадров".format(cv))
+                else:
+                    rep.err(w + ".cover", "обложки «{}» нет среди кадров альбома".format(cv))
+        text_list = [text] if isinstance(text, str) and text.strip() else (text if isinstance(text, list) else [])
+        return {"i": i, "w": w, "genre": gk, "g": g, "key": slug, "slug": g["slug"] + slug + "/", "title": title.strip(),
+                "subtitle": (a.get("subtitle") or "").strip() if isinstance(a.get("subtitle"), str) else "",
+                "year": year if isinstance(year, int) and not isinstance(year, bool) else None, "text": text_list,
+                "demo": a.get("demo") is True, "description": a.get("description") if isinstance(a.get("description"), str) else "",
+                "frames": frames, "cover": cover}
+
+    def parse_frame(self, x, wk, rep, gk, a, k):
+        """Кадр альбома → {"_p": фото, "focus": …}. Фото — запись из photos.json (по id) или «локальное фото»
+        того же вида (thumb/mid/large/w/h/alt), собранное из объекта {"src", "w", "h", "alt"[, "thumb", "focus"]}."""
+        if isinstance(x, int) and not isinstance(x, bool):
+            x = {"id": x}
+        if isinstance(x, dict) and "id" in x:
+            pid = x["id"]
+            if isinstance(pid, bool) or not isinstance(pid, int):
+                rep.err(wk, "id кадра — число, получено {!r}".format(pid))
+                return None
+            p = self.photos.get(pid)
+            if not p:
+                rep.err(wk, "кадра с id {} нет в content/photos.json (есть 0–{})".format(pid, max(self.photos)))
+                return None
+            if gk and p["genre"] != gk:
+                rep.err(wk, "кадр {} из жанра «{}», а альбом — «{}»: чужие кадры в альбом не ставим".format(pid, p["genre"], gk))
+                return None
+            for f in x:
+                if f not in ("id", "focus"):
+                    rep.warn(wk, "неизвестное поле «{}» — будет проигнорировано".format(f))
+            return {"_p": p, "focus": x.get("focus") if isinstance(x.get("focus"), str) else None}
+        if not isinstance(x, dict) or "src" not in x:
+            rep.err(wk, "кадр — id из photos.json (число) или объект {\"src\": \"assets/img/albums/<жанр>/<slug>/01.jpg\", \"w\": 2400, \"h\": 1600, \"alt\": \"…\"}")
+            return None
+        for f, v in x.items():
+            if f not in self.FRAME_FIELDS:
+                rep.warn(wk, "неизвестное поле «{}» — будет проигнорировано".format(f))
+            elif not TYPE_CHECK[self.FRAME_FIELDS[f]](v):
+                rep.err(wk, "поле «{}» должно быть: {}".format(f, TYPE_NAMES[self.FRAME_FIELDS[f]]))
+                return None
+        src = x["src"].strip().lstrip("/")
+        if not src.startswith(ALBUM_DIR + "/") or ".." in src.split("/") or "\\" in src:
+            rep.err(wk, "src — путь внутри src/{}/ (например «{}/{}/{}/01.jpg»), сейчас «{}»".format(
+                ALBUM_DIR, ALBUM_DIR, gk or "<жанр>", a.get("slug") or "<slug>", x["src"]))
+            return None
+        if not re.search(r"\.(jpe?g|png|webp|avif)$", src, re.IGNORECASE):
+            rep.err(wk, "src — картинка .jpg, .png, .webp или .avif")
+            return None
+        if not (SRC / src).is_file():
+            rep.err(wk, "файла src/{} нет — добавьте его (tools/add_album.py) или поправьте путь".format(src))
+            return None
+        pw, ph_ = x.get("w"), x.get("h")
+        if not (isinstance(pw, int) and isinstance(ph_, int) and pw > 0 and ph_ > 0):
+            rep.err(wk, "нужны w и h — размер файла в пикселях (их пишет tools/add_album.py)")
+            return None
+        alt = x.get("alt") if isinstance(x.get("alt"), str) else ""
+        if not alt.strip():
+            rep.warn(wk, "нет alt — подставлю «{}, кадр {}»; лучше описать, что в кадре".format(a.get("title", "Альбом"), k + 1))
+            alt = "{}, кадр {}".format(a.get("title", "Альбом"), k + 1)
+        thumb = x.get("thumb", "").strip().lstrip("/") if isinstance(x.get("thumb"), str) else ""
+        if thumb and not (SRC / thumb).is_file():
+            rep.warn(wk, "превью src/{} нет — беру основной файл".format(thumb))
+            thumb = ""
+        if not thumb:
+            stem, dot, ext = src.rpartition(".")
+            conv = stem + ALBUM_THUMB + dot + ext
+            thumb = conv if (SRC / conv).is_file() else ""
+        r = pw / ph_
+        orient = "portrait" if r < 0.9 else ("wide" if r > 1.7 else "landscape")
+        big = "/" + src
+        srcset = [(pw, big)]
+        if thumb:
+            tw = round(pw * 800 / max(pw, ph_)) if max(pw, ph_) > 800 else pw
+            if tw < pw:
+                srcset.insert(0, (tw, "/" + thumb))
+        p = {"id": None, "src": src, "genre": gk, "orientation": orient, "ratio": round(r, 3), "w": pw, "h": ph_, "alt": alt.strip(),
+             "thumb": "/" + (thumb or src), "mid": big, "large": big, "_srcset": srcset, "_lw": pw, "_lh": ph_}
+        if isinstance(x.get("focus"), str):
+            p["focus"] = x["focus"]
+        return {"_p": p, "focus": None}
+
+    def genre_albums(self, key):
+        return [al for al in self.albums if al["genre"] == key]
 
     @staticmethod
     def scan_local_photos():
@@ -342,7 +573,8 @@ class Site:
         return self.cfg.get("genre_labels", {}).get(key, key)
 
     def photo_caption(self, p):
-        return "№ {:03d} — {}".format(p["id"], self.genre_name(p["genre"]))
+        """Подпись кадра в лайтбоксе — название жанра. Номер кадра клиенту ничего не говорит (бриф v3 §1)."""
+        return self.genre_name(p["genre"])
 
     def genre_photos(self, key):
         return [p for p in self.photo_list if p["genre"] == key]
@@ -383,6 +615,15 @@ class Site:
 
 def expected_slug(name):
     return "/" if name == "home" else "/" + name + "/"
+
+
+def photo_key(p):
+    """Ключ кадра: id из photos.json или путь локального файла альбома (у него id нет)."""
+    return p["id"] if p.get("id") is not None else p.get("large")
+
+
+def frame_label(p):
+    return str(p["id"]) if p.get("id") is not None else "«{}»".format(p.get("src", p.get("large")))
 
 
 def out_file(slug):
@@ -440,7 +681,7 @@ class PageCtx:
         return self.prefix + target + ("#" + frag if frag else "")
 
     def check_slug(self, slug, where):
-        if slug in self.site.pages:
+        if slug in self.site.pages or slug in self.site.album_by_slug:
             return
         if slug in self.site.redirects:
             self.rep.warn(where, "ссылка на {} — это старый адрес, пишите {}".format(slug, self.site.redirects[slug]))
@@ -581,6 +822,8 @@ class PageCtx:
         return self.site.su + u if isinstance(u, str) and u.startswith("/") else u
 
     def srcset(self, p):
+        if p.get("_srcset"):   # локальный кадр альбома: превью 800 px + основной файл (ширины — по факту)
+            return ", ".join("{} {}w".format(self.purl(u), w) for w, u in p["_srcset"])
         return "{} 480w, {} 1280w, {} 1920w".format(self.purl(p["thumb"]), self.purl(p["mid"]), self.purl(p["large"]))
 
     def img(self, p, sizes, lazy=True, priority=False, alt=None, cls=""):
@@ -663,33 +906,37 @@ class PageCtx:
         return '<section class="{}" id="{}"{}>{}</section>'.format(" ".join(classes), sid, labelled, body)
 
     def sh(self, b, style=None):
-        """Шапка секции: пунктирная метка с «лампой» + огромный заголовок H2 (или H2 в виде метки)."""
+        """Шапка секции v3 «аккуратнее»: простая моно-метка (без рамки и «лампы») + заголовок H2 одного веса
+        (или H2 в виде метки). Правая мета-подпись — только при SECTION_META = True."""
         style = b.get("title_style") or style or "xl"
         if style not in ("xl", "l", "tag"):
             self.rep.warn(b["_w"], "title_style бывает xl | l | tag")
             style = "xl"
         title, eyebrow, note, meta = b.get("title"), b.get("eyebrow"), b.get("note"), b.get("meta")
+        if not SECTION_META:
+            meta = None
         if not (title or eyebrow):
             return ""
         if title and eyebrow:
             # метка над заголовком не повторяет его: «Кейс» над «Кейс», «Как снимаю» над «Как снимаю сцену» — тавтология
             # на экране и двойное чтение скринридером
             e, t = norm(eyebrow).rstrip(".:"), norm(title)
-            if t == e or t.startswith(e + " ") or t.startswith(e + ":"):
+            # v3: и когда все слова метки уже есть в заголовке («Вопросы» над «Частые вопросы») — метка лишняя
+            ew, tw = set(re.findall(r"[\wё]+", e)), set(re.findall(r"[\wё]+", t))
+            if t == e or t.startswith(e + " ") or t.startswith(e + ":") or (ew and ew <= tw):
                 eyebrow = None
         sid, w = b["_id"], b["_w"]
         meta_html = '<span class="sh__meta mono">{}</span>'.format(self.md(meta, w + ".meta")) if meta else ""
         note_html = '<p class="sh__note">{}</p>'.format(self.md(note, w + ".note")) if note else ""
-        lamp = '<i class="lamp" aria-hidden="true"></i>'
         if style == "tag" or not title:
             tagname = "h2" if title else "p"
             idattr = ' id="h-{}"'.format(sid) if title else ""
-            top = '<div class="sh__top"><{t} class="tag"{i}>{l}<span>{x}</span></{t}>{m}</div>'.format(
-                t=tagname, i=idattr, l=lamp, x=self.md(title or eyebrow, w), m=meta_html)
+            top = '<div class="sh__top"><{t} class="tag"{i}><span>{x}</span></{t}>{m}</div>'.format(
+                t=tagname, i=idattr, x=self.md(title or eyebrow, w), m=meta_html)
             return '<header class="sh sh--tag" data-rv>{}{}</header>'.format(top, note_html)
         top = ""
         if eyebrow or meta:
-            tg = '<p class="tag">{}<span>{}</span></p>'.format(lamp, self.t(eyebrow)) if eyebrow else "<span></span>"
+            tg = '<p class="tag"><span>{}</span></p>'.format(self.t(eyebrow)) if eyebrow else "<span></span>"
             top = '<div class="sh__top">{}{}</div>'.format(tg, meta_html)
         h2 = '<h2 class="sh__t sh__t--{s}" id="h-{i}"><span class="mk"><span>{x}</span></span></h2>'.format(
             s=style, i=sid, x=self.md(title, w + ".title"))
@@ -729,8 +976,8 @@ class PageCtx:
             t = b.get("type")
             if t in HEROES:
                 heroes += 1
-            if t in BLOCK_SPECS:
-                base = b.get("id") if isinstance(b.get("id"), str) else DEFAULT_IDS.get(t, t)
+            if t in BLOCK_SPECS or self.internal(t):
+                base = b.get("id") if isinstance(b.get("id"), str) else DEFAULT_IDS.get(t) or INTERNAL_BLOCKS.get(t, t)
                 if t == "lead-form":
                     if b.get("id") and b["id"] != "zayavka":
                         self.rep.warn(b["_w"], "id блока lead-form всегда «zayavka» (CTA-полоса Telegram; на неё ведёт якорь #zayavka в тексте)")
@@ -760,11 +1007,15 @@ class PageCtx:
                 k += 1
                 b["_group"] = b.get("group") if isinstance(b.get("group"), str) else "g{}".format(k)
         if heroes == 0:
-            self.rep.err("blocks", "на странице нет первого экрана (hero-person или genre-hero) — в нём живёт единственный H1")
+            self.rep.err("blocks", "на странице нет первого экрана (hero-person, genre-hero или contact-hero) — в нём живёт единственный H1")
         elif heroes > 1:
-            self.rep.err("blocks", "первый экран (hero-person / genre-hero) должен быть один — один H1 на страницу")
+            self.rep.err("blocks", "первый экран (hero-person / genre-hero / contact-hero) должен быть один — один H1 на страницу")
         if sum(1 for b in blocks if isinstance(b, dict) and b.get("type") == "lead-form") > 1:
             self.rep.err("blocks", "блок lead-form (CTA-полоса Telegram) должен быть один на странице")
+
+    def internal(self, t):
+        """Служебный блок страницы альбома — только на страницах, которые генератор собирает сам (AlbumCtx)."""
+        return False
 
     def validate_block(self, b):
         t = b.get("type")
@@ -855,13 +1106,16 @@ class PageCtx:
         else:
             tags_html = '<span class="hp__tags">{}</span>'.format(" ".join(tag_html(i, x) for i, x in enumerate(tags)))
         h1_html = '<h1 class="hp__h1" id="h1">{}<span class="vh"> — </span>{}</h1>'.format(name_html, tags_html)
-        meta = b.get("meta") or [self.cfg["brand"], self.cfg["city"]]
-        meta_html = '<div class="hp__meta mono">{}</div>'.format("".join("<span>{}</span>".format(self.t(m)) for m in meta))
+        # v3: мета-строка над портретом (координаты, Photo & Video Lab, город) и строка мессенджеров под кнопкой —
+        # только если явно заданы в JSON (meta: [...], messengers: true). По умолчанию первый экран чистый:
+        # портрет, имя, плашки, одна строка, одна кнопка
+        meta = b.get("meta") or []
+        meta_html = '<div class="hp__meta mono">{}</div>'.format("".join("<span>{}</span>".format(self.t(m)) for m in meta)) if meta else ""
         lead = '<p class="hp__lead">{}</p>'.format(self.md(b["lead"], w + ".lead")) if b.get("lead") else ""
         acts = self.actions(b.get("actions"), w + ".actions", default=[{"label": "Обсудить съёмку", "href": "#zayavka"}],
                             cls="acts hp__acts")
         msg = ""
-        if b.get("messengers", True):
+        if b.get("messengers", False):
             c = self.cfg["contacts"]
             msg = '<p class="hp__msg mono">Telegram: <a href="{}" target="_blank" rel="noopener" data-cta="tg">{}</a> · <a href="{}" target="_blank" rel="noopener">WhatsApp</a></p>'.format(
                 esc(c["telegram"]), esc(c.get("telegram_handle", "Telegram")), esc(c["whatsapp"]))
@@ -892,27 +1146,34 @@ class PageCtx:
             if "photo" not in b:
                 self.rep.err(w, "для variant «{}» нужно поле photo (id кадра)".format(variant))
             variant = "text"
-        facts = b.get("facts")
+        # v3: строка фактов справа от крошек — шум (бриф v3 §1: «07 направлений», «Стоимость — по запросу»); при
+        # HERO_FACTS = False первый экран показывает только крошки, поле facts в JSON молча пропускается
+        facts = b.get("facts") if HERO_FACTS else []
         if facts is None:
             facts = []
             if g:
-                # число кадров показываем, только когда оно работает на доверие (≥ MIN_COUNT_SHOWN):
-                # «1 кадр» у свадеб или авто выдаёт тонкое портфолио
+                # жанр показывает съёмки (альбомы), а не стену кадров: «4 съёмки»; число — от двух, «1 съёмка» выдаёт
+                # тонкое портфолио. Без альбомов — число кадров, только когда оно работает на доверие (≥ MIN_COUNT_SHOWN)
+                na = len(self.site.genre_albums(g["key"]))
                 n = self.site.counts.get(g["key"], 0)
-                if n >= MIN_COUNT_SHOWN:
+                if na >= 2:
+                    facts.append("{} {}".format(na, plural(na, "съёмка", "съёмки", "съёмок")))
+                elif not na and n >= MIN_COUNT_SHOWN:
                     facts.append("{} {}".format(n, plural(n, "кадр", "кадра", "кадров")))
-            facts += [self.cfg["city"], "Стоимость — по запросу"]
+            facts.append(self.cfg["city"])
         facts_html = '<p class="gh__facts mono">{}</p>'.format("".join("<span>{}</span>".format(self.t(x)) for x in facts)) if facts else ""
         chs, _ = self.letters(word)
         # data-fit-max: слово подгоняется по ширине, но не выше доли окна — короткое слово («Отзывы») не съедает первый экран
         word_html = '<p class="gh__word" aria-hidden="true" data-fit data-fit-max="{}" style="--n:{}"><span class="gh__in">{}</span></p>'.format(
             FIT_MAX_WORD, len(word), chs)
-        eb = '<p class="gh__eyebrow tag"><i class="lamp" aria-hidden="true"></i><span>{}</span></p>'.format(self.t(b["eyebrow"])) if b.get("eyebrow") else ""
+        eb = '<p class="gh__eyebrow tag"><span>{}</span></p>'.format(self.t(b["eyebrow"])) if b.get("eyebrow") else ""
         lead = '<p class="gh__lead">{}</p>'.format(self.md(b["lead"], w + ".lead", nw=True)) if b.get("lead") else ""
         default = [{"label": "Обсудить съёмку", "href": "#zayavka"}]
         gal = self.first_gallery()
         if gal and gal.get("_id"):
-            default.append({"label": "Смотреть кадры ↓", "href": "#" + gal["_id"], "style": "link"})
+            # под первым экраном — сетка альбомов (жанр, бриф v3 §3) или галерея кадров (SEO-страницы)
+            label = "Смотреть съёмки ↓" if gal.get("type") == "albums" else "Смотреть кадры ↓"
+            default.append({"label": label, "href": "#" + gal["_id"], "style": "link"})
         acts = self.actions(b.get("actions"), w + ".actions", default=default)
         fig = ""
         portrait = bool(p) and variant == "photo" and self.orient(p) == "P"
@@ -929,7 +1190,8 @@ class PageCtx:
             cap = b.get("caption")
             capt = '<figcaption class="gh__cap mono"><span>{}</span></figcaption>'.format(self.t(cap)) if cap else ""
             # обложка открывается в лайтбоксе первой, дальше стрелками — кадры галереи страницы
-            wth = ' data-lb-with="{}"'.format(esc(gal["_group"])) if gal and gal.get("_group") else ""
+            # (у сетки альбомов группы лайтбокса нет: карточка ведёт на страницу альбома — обложка открывается одна)
+            wth = ' data-lb-with="{}"'.format(esc(gal["_group"])) if gal and gal.get("type") == "gallery" and gal.get("_group") else ""
             fig = ('<figure class="gh__fig{pc}" style="{st}"><a class="gh__a" href="{href}" data-lb="hero"{wth} data-cap="{cap}">{img}</a>'
                    '{capt}</figure>').format(
                 pc=" gh__fig--portrait" if portrait else "", st=esc(style.strip(";")), href=esc(self.purl(p["large"])),
@@ -946,53 +1208,94 @@ class PageCtx:
                 '</div>{fig}</section>').format(
             v=variant, id=b["_id"], crumbs=self.crumbs(), facts=facts_html, eb=eb, word=word_html, row=row, fig=fig)
 
+    # ------------------------------------------------------------------ contact-hero (первый экран «Контактов»)
+    def b_contact_hero(self, b):
+        """Первый экран «Контактов» (бриф v3 §4): слева — крупное слово + H1, строка-лид, главный контакт — ник Telegram
+        крупно, ниже строка «Телефон · WhatsApp · Город»; справа — портрет Александра (id 93) 4:5. На телефоне:
+        слово → портрет (квадрат по лицу, focus_mobile) → лид → Telegram → остальные контакты.
+        Если H1 начинается со слова («Контакты фотографа в Новосибирске») — слово и есть начало H1, остальное — подписью."""
+        w = b["_w"]
+        c = self.cfg["contacts"]
+        word = b.get("word") or self.nav_label()
+        h1 = str(self.d.get("h1", ""))
+        if norm(h1).startswith(norm(word)):
+            rest = h1[len(word):].strip()
+            h1_html = '<h1 class="ct__h1" id="h1"><span class="ct__word">{}</span>{}</h1>'.format(
+                self.t(h1[:len(word)]), ' <span class="ct__sub">{}</span>'.format(self.md(rest, w, nw=True)) if rest else "")
+        else:
+            h1_html = ('<p class="ct__word" aria-hidden="true">{}</p><h1 class="ct__h1" id="h1"><span class="ct__sub">{}</span></h1>').format(
+                self.t(word), self.md(h1, w, nw=True))
+        lead = '<p class="ct__lead">{}</p>'.format(self.md(b["lead"], w + ".lead", nw=True)) if b.get("lead") else ""
+        tg, handle = c["telegram"], c.get("telegram_handle", "Telegram")
+        tg_html = ('<a class="ct__tg" href="{tg}" target="_blank" rel="noopener" data-cta="tg" aria-label="{al}">'
+                   '<span class="ct__cap mono">{cap}</span><span class="ct__h">{h}</span>'
+                   '<span class="ct__arr" aria-hidden="true">↗</span></a>').format(
+            tg=esc(tg), al=esc("Написать в Telegram " + handle), cap=self.t(b.get("tg_label") or "Telegram — быстрее всего"), h=esc(handle))
+        items = b.get("items")
+        lis = []
+        if isinstance(items, list) and items:
+            for i, it in enumerate(items):
+                wi = "{}.items[{}]".format(w, i)
+                if not isinstance(it, dict) or not it.get("label") or not it.get("text"):
+                    self.rep.err(wi, "контакт — объект {\"label\": \"Телефон\", \"text\": \"+7 …\", \"href\": \"tel:…\"}")
+                    continue
+                val = self.t(it["text"]).replace(" ", NBSP)
+                if it.get("href"):
+                    href = self.link(it["href"], wi)
+                    val = '<a href="{}"{}>{}</a>'.format(esc(href), self.ext_attrs(href), val)
+                lis.append('<li><span class="mono">{}</span>{}</li>'.format(self.t(it["label"]), val))
+        else:
+            lis = ['<li><span class="mono">Телефон</span><a href="{}">{}</a></li>'.format(
+                       esc(c["phone_href"]), esc(c["phone_display"]).replace(" ", NBSP)),
+                   '<li><span class="mono">WhatsApp</span><a href="{}" target="_blank" rel="noopener">{}{}↗</a></li>'.format(
+                       esc(c["whatsapp"]), esc(c.get("messenger_display", "Написать")).replace(" ", NBSP), NBSP),
+                   '<li><span class="mono">Город</span><span>{}</span></li>'.format(esc(self.cfg["city"]))]
+        fig = ""
+        p = self.photo(b["photo"], w + ".photo") if "photo" in b else None
+        if p:
+            sizes = "(min-width: 900px) 38vw, calc(100vw - 32px)"
+            self.hero_photo, self.hero_sizes = p, sizes
+            style = self.focus_vars(b.get("focus") or p.get("focus"))
+            if b.get("focus_mobile"):
+                fx, _, fy = b["focus_mobile"].partition(" ")
+                style += ";--mfx:{};--mfy:{}".format(fx, fy or "50%")
+            fig = '<figure class="ct__fig" style="{}">{}</figure>'.format(esc(style.strip(";")), self.img(p, sizes, priority=True))
+        return ('<section class="ct" id="{id}" aria-labelledby="h1"><div class="wrap">'
+                '<div class="gh__top">{crumbs}</div>'
+                '<div class="ct__grid{nf}"><div class="ct__head">{h1}</div>{fig}{lead}{tg}<ul class="ct__list">{lis}</ul></div>'
+                '</div></section>').format(
+            id=b["_id"], crumbs=self.crumbs(), nf="" if fig else " ct__grid--nophoto", h1=h1_html, fig=fig, lead=lead,
+            tg=tg_html, lis="".join(lis))
+
     # ------------------------------------------------------------------ genre-tabs
     def b_genre_tabs(self, b):
         active = b.get("active") or (self.genre["slug"] if self.genre else self.slug)
         lis = []
-        # вместо числа кадров — порядковый номер 01–07, как в списке направлений (счётчик «1» выдаёт тонкое портфолио)
-        for i, g in enumerate(self.site.genres):
+        # v3: без номеров 01–07 и без счётчиков кадров — только название в скобках, активная — кремовая плашка
+        for g in self.site.genres:
             cur = ' aria-current="page"' if g["slug"] == active else ""
             self.check_slug(g["slug"], b["_w"])
-            lis.append('<li><a href="{}"{}><span class="br" aria-hidden="true">[</span><span class="gtabs__no" aria-hidden="true">{:02d}</span>{}<span class="br" aria-hidden="true">]</span></a></li>'.format(
-                esc(self.slug_href(g["slug"])), cur, i + 1, self.t(g["name"])))
+            lis.append('<li><a href="{}"{}><span class="br" aria-hidden="true">[</span>{}<span class="br" aria-hidden="true">]</span></a></li>'.format(
+                esc(self.slug_href(g["slug"])), cur, self.t(g["name"])))
         label = b.get("label", "Направления")
         return ('<nav class="gtabs" id="{}" aria-label="{}"><div class="wrap gtabs__in">'
                 '<span class="gtabs__label mono" aria-hidden="true">{}</span><div class="gtabs__sc" data-tabs><ul>{}</ul></div></div></nav>').format(
             b["_id"], esc(label), self.t(label), "".join(lis))
 
-    # ------------------------------------------------------------------ directions (список iampolie)
+    # ------------------------------------------------------------------ directions (сдержанный список слов)
     def dir_list(self, items, compact=False):
-        """items: [{href, label, cat, no, photos:[p, …]}] → список огромных слов + два плавающих превью."""
-        rows, left, right = [], [], []
-        for i, it in enumerate(items):
-            ph = it["photos"]
-            th = self.thumb(ph[0], "dir__th") if ph else ""
-            rows.append(('<li class="dir__i"><a class="dir__a" href="{href}" data-i="{i}">'
-                         '<span class="dir__cat mono">{cat}</span><span class="dir__w">{label}</span>'
-                         '<span class="dir__no mono">{no}</span><span class="dir__go" aria-hidden="true">→</span>{th}</a></li>').format(
-                href=esc(it["href"]), i=i, cat=self.t(it.get("cat", "")), label=self.t(it["label"]),
-                no=esc(it.get("no", "")), th=th))
-            if ph:
-                right.append(self.thumb(ph[0], alt="").replace("<img ", '<img data-i="{}" '.format(i), 1))
-            if len(ph) > 1:
-                left.append(self.thumb(ph[1], alt="").replace("<img ", '<img data-i="{}" '.format(i), 1))
-        pv = ('<div class="dir__pv" aria-hidden="true"><div class="dir__card dir__card--l">{}</div>'
-              '<div class="dir__card dir__card--r">{}</div></div>').format("".join(left), "".join(right))
-        return '<div class="dir-box{}" data-dir><ul class="dir">{}</ul>{}</div>'.format(
-            " dir-box--s" if compact else "", "".join(rows), pv)
-
-    def genre_previews(self, key, override=None):
-        if isinstance(override, list) and override:
-            return [p for p in (self.site.photos.get(x) for x in override) if p]
-        cover = self.site.photos.get(self.site.covers.get(key))
-        rest = [p for p in self.site.genre_photos(key) if not cover or p["id"] != cover["id"]]
-        second = next((p for p in rest if p.get("orientation") == "portrait"), rest[0] if rest else None)
-        return [x for x in (cover, second) if x]
+        """items: [{href, label}] → столбик слов по центру. v3 «сдержанно»: без плашки, всплывающих фото, подписей-категорий
+        и номеров. Слово приглушено; наведение/фокус — лёгкое увеличение (scale 1.05) и полная яркость, клик — переход
+        (со шторкой). Ссылка шириной в слово: увеличивается ровно то, на что навели."""
+        rows = []
+        for it in items:
+            rows.append('<li class="dir__i"><a class="dir__a" href="{}"><span class="dir__w">{}</span></a></li>'.format(
+                esc(it["href"]), self.t(it["label"])))
+        return '<div class="dir-box{}"><ul class="dir" data-rv>{}</ul></div>'.format(
+            " dir-box--s" if compact else "", "".join(rows))
 
     def b_directions(self, b):
         w = b["_w"]
-        prev = b.get("previews") or {}
         items = []
         slugs = b.get("items")
         if slugs is None:
@@ -1007,9 +1310,7 @@ class PageCtx:
             slug = it["slug"] if it["slug"].endswith("/") else it["slug"] + "/"
             g = self.site.genre_by_slug.get(slug)
             href = self.link(slug, wi)
-            photos = self.genre_previews(g["key"], prev.get(g["key"])) if g else [x for x in [self.site.page_photo(slug)] if x]
-            items.append({"href": href, "label": it.get("label") or (g["name"] if g else self.site.label(slug)),
-                          "cat": it.get("cat") or (g.get("cat", "") if g else ""), "no": "{:02d}".format(i + 1), "photos": photos})
+            items.append({"href": href, "label": it.get("label") or (g["name"] if g else self.site.label(slug))})
         head = '<div class="wrap">{}</div>'.format(self.sh(b, "tag"))
         return '<section class="sec b-directions" id="{}"{}>{}{}</section>'.format(
             b["_id"], ' aria-labelledby="h-{}"'.format(b["_id"]) if b.get("title") else "", head, self.dir_list(items))
@@ -1056,27 +1357,43 @@ class PageCtx:
             self.rep.warn(w, "layout бывает list | grid")
             layout = "list"
         if layout == "grid":
-            # компактная сетка (2–3 колонки): миниатюра, подпись-категория и слово поменьше — когда списков на странице
-            # несколько подряд (/uslugi/), второй и третий огромный список превращают страницу в стену слов
+            # компактная сетка: миниатюра, слово поменьше и стрелка — когда списков на странице несколько подряд (/uslugi/),
+            # второй и третий огромный список превращают страницу в стену слов. v3 «аккуратнее»: без подписей-категорий
+            # (поле cat не выводится, как и у направлений). Колонки — 3 или 4, чтобы последний ряд был полнее:
+            # 7 → 4 + 3, 6 → 3 + 3, 5 → 3 + 2, 8 → 4 + 4; до трёх пунктов — в один ряд. Поле columns (2–4) — вручную.
+            n = len(items)
+            cols = b.get("columns")
+            if cols not in (None, 2, 3, 4):
+                self.rep.warn(w + ".columns", "columns бывает 2, 3 или 4")
+                cols = None
+            if cols is None:
+                cols = max(n, 1) if n <= 3 else min((4, 3), key=lambda c: ((c - n % c) % c, -c))
             lis = []
             for it in items:
                 ph = it["photos"]
                 th = self.thumb(ph[0], "rg__th") if ph else '<span class="rg__th" aria-hidden="true"></span>'
-                lis.append(('<li class="rg__i"><a class="rg__a" href="{h}">{th}<span class="rg__txt"><span class="rg__cat mono">{c}</span>'
+                lis.append(('<li class="rg__i"><a class="rg__a" href="{h}">{th}<span class="rg__txt">'
                             '<span class="rg__w">{l}</span></span><span class="rg__go" aria-hidden="true">→</span></a></li>').format(
-                    h=esc(it["href"]), th=th, c=self.t(it.get("cat", "")), l=self.t(it["label"])))
+                    h=esc(it["href"]), th=th, l=self.t(it["label"])))
             head = self.sh(b, "tag")
-            return '<section class="sec b-related b-related--grid" id="{}" aria-labelledby="h-{}"><div class="wrap">{}<ul class="rg">{}</ul></div></section>'.format(
-                b["_id"], b["_id"], head, "".join(lis))
+            return ('<section class="sec b-related b-related--grid" id="{}" aria-labelledby="h-{}"><div class="wrap">{}'
+                    '<ul class="rg rg--c{}">{}</ul></div></section>').format(b["_id"], b["_id"], head, cols, "".join(lis))
         head = '<div class="wrap">{}</div>'.format(self.sh(b, "tag"))
         return '<section class="sec b-directions b-related" id="{}" aria-labelledby="h-{}">{}{}</section>'.format(
             b["_id"], b["_id"], head, self.dir_list(items, compact=True))
 
     # ------------------------------------------------------------------ gallery (бенто)
     def first_gallery(self):
-        """Первая галерея страницы, которая будет показана (для кнопки «Смотреть кадры ↓» и лайтбокса обложки)."""
-        return next((x for x in self.d.get("blocks", []) if isinstance(x, dict) and x.get("type") == "gallery"
-                     and self.gallery_visible(x)), None)
+        """Первая галерея или сетка альбомов страницы, которая будет показана (для кнопки «Смотреть кадры ↓» /
+        «Смотреть съёмки ↓» и лайтбокса обложки)."""
+        for x in self.d.get("blocks", []):
+            if not isinstance(x, dict):
+                continue
+            if x.get("type") == "gallery" and self.gallery_visible(x):
+                return x
+            if x.get("type") == "albums" and self.album_list(x):
+                return x
+        return None
 
     def gallery_ids(self, b):
         """Список id кадров галереи после exclude, авто-исключения (кадры первого экрана и кейсов) и limit — без сообщений."""
@@ -1097,8 +1414,8 @@ class PageCtx:
         return n > 0 and not (isinstance(b.get("min"), int) and n < b["min"])
 
     def lb_cap(self, p):
-        """Подпись в лайтбоксе: на главной и жанрах — «№ 020 — Портреты», на SEO и служебных — название страницы
-        (метка чужого жанра и alt-описание там выглядят каталогом, а не портфолио)."""
+        """Подпись в лайтбоксе (на плитках подписей нет — бриф v3 §1): на главной и жанрах — название жанра кадра
+        («Портреты»), на SEO и служебных — название страницы (метка чужого жанра там выглядит каталогом)."""
         if self.type in ("home", "genre"):
             return self.site.photo_caption(p)
         return self.nav_label()
@@ -1192,22 +1509,61 @@ class PageCtx:
                 groups.append(("ppp", head))
         return groups
 
-    def ph(self, x, group, style, sizes, dl=0, cls="ph"):
+    def ph(self, x, group, style, sizes, dl=0, cls="ph", lazy=True, priority=False):
         p = x["_p"]
         self.gallery_photos.append(p)
         self.has_lb = True
+        if priority and not self.hero_photo:
+            # первый кадр страницы альбома — LCP: preload в <head> с теми же sizes
+            self.hero_photo, self.hero_sizes = p, sizes
         f = self.focus_vars(x.get("focus") or p.get("focus"))
         st = ";".join(s for s in (style, f, "--dl:{}ms".format(dl) if dl else "") if s)
-        # подпись «№ 020 · Портреты» — только на главной и жанрах; на SEO и служебных страницах метка чужого жанра
-        # («Корпоративы» на странице конференций) выглядит каталогом — там подписи нет
-        cap = ""
-        if self.type in ("home", "genre"):
-            cap = '<figcaption class="ph__cap mono"><span class="ph__no">№&nbsp;{:03d}</span><span class="ph__g">{}</span></figcaption>'.format(
-                p["id"], self.t(self.site.genre_name(p["genre"])))
+        # v3: на плитке только кадр — без «№ 020 · Портреты» (номер кадра — шум); подпись живёт в лайтбоксе (data-cap)
         return ('<figure class="{cls}" data-rv style="{st}"><a class="ph__a" href="{href}" data-lb="{g}" data-cap="{lc}">{img}</a>'
-                '{cap}</figure>').format(
+                '</figure>').format(
             cls=cls, st=esc(st), href=esc(self.purl(p["large"])), g=esc(group), lc=esc(self.lb_cap(p)),
-            img=self.img(p, sizes), cap=cap)
+            img=self.img(p, sizes, lazy=lazy, priority=priority))
+
+    def gallery_body(self, items, group, layout="bento", solo_note="", eager=0):
+        """Раскладка кадров: bento (шаблоны рядов BENTO) или solo (1–2 кадра крупно, без обрезки: кадр целиком
+        помещается в окно). eager — сколько первых кадров грузить сразу (страница альбома: кадры сразу под заголовком)."""
+        n = len(items)
+        if layout == "solo" or n == 1:
+            parts = []
+            for k, x in enumerate(items[:2]):
+                p = x["_p"]
+                r = "2/3" if self.orient(p) == "P" else "3/2"
+                rn = 2 / 3 if self.orient(p) == "P" else 1.5
+                parts.append(self.ph(x, group, "--r:{};--rn:{}".format(r, round(rn, 4)), "(min-width: 900px) 80vw, 100vw",
+                                     cls="ph ph--solo", lazy=k >= eager, priority=eager > 0 and k == 0))
+            note = '<p class="solo__note">{}</p>'.format(solo_note) if solo_note else ""
+            return '<div class="solo{}">{}{}</div>'.format(" solo--2" if len(parts) == 2 else "", "".join(parts), note)
+        gs = []
+        k_all = 0
+        for gi, (name, its) in enumerate(self.bento_groups(items)):
+            rows, slots = BENTO[name]
+            roles = [s[0] for s in slots]
+            # мобильная раскладка: 2 колонки; одиночный вертикальный / нечётный малый кадр — на всю ширину
+            pidx = [k for k, r in enumerate(roles) if r in ("p", "ps")]
+            sidx = [k for k, r in enumerate(roles) if r == "ls"]
+            parts = []
+            for k, (x, (role, _o, area)) in enumerate(zip(its, slots)):
+                if role in ("p", "ps"):
+                    single = len(pidx) % 2 == 1 and k == pidx[0]
+                    ms, mr = (2, "4/5") if single else (1, "2/3")
+                elif role == "ls":
+                    single = len(sidx) % 2 == 1 and k == sidx[0]
+                    ms, mr = (2, "3/2") if single else (1, "1/1")
+                else:
+                    ms, mr = 2, "3/2"
+                c0, c1 = [int(v) for v in area.split("/")[1::2]]
+                vw = round((c1 - c0) / 12 * 100)
+                sizes = "(min-width: 700px) {}vw, {}vw".format(vw, 100 if ms == 2 else 50)
+                parts.append(self.ph(x, group, "--a:{};--ms:{};--mr:{}".format(area, ms, mr), sizes, dl=(k % 3) * 80,
+                                     lazy=k_all >= eager, priority=eager > 0 and k_all == 0))
+                k_all += 1
+            gs.append('<div class="bento__g bento__g--{}" style="--rows:{}">{}</div>'.format(name, rows, "".join(parts)))
+        return '<div class="bento">{}</div>'.format("".join(gs))
 
     def b_gallery(self, b):
         items = self.gallery_items(b)
@@ -1229,43 +1585,8 @@ class PageCtx:
             b = dict(b, meta=b["meta"].replace("{n}", "{} {}".format(n, plural(n, "кадр", "кадра", "кадров"))))
         elif isinstance(b.get("meta"), str) and re.match(r"^\d+\s+кадр", b["meta"]) and not b["meta"].startswith("{} ".format(n)):
             self.rep.warn(b["_w"], "в meta «{}» число кадров не совпадает с галереей ({}) — пишите «{{n}} · …»".format(b["meta"], n))
-        if layout == "solo" or n == 1:
-            parts = []
-            for x in items[:2]:
-                p = x["_p"]
-                parts.append(self.ph(x, group, "--r:{}".format("2/3" if self.orient(p) == "P" else "3/2"), "(min-width: 900px) 70vw, 100vw", cls="ph ph--solo"))
-            note = '<p class="solo__note">{}</p>'.format(self.md(b["solo_note"], b["_w"])) if b.get("solo_note") else ""
-            body = '<div class="solo">{}{}</div>'.format("".join(parts), note)
-        else:
-            gs = []
-            # на телефоне подпись жанра — только на двух первых крупных (во всю ширину) тайлах
-            # и только в смешанной подборке (на странице жанра она повторяла бы заголовок)
-            labs = 0 if len({x["_p"]["genre"] for x in items}) > 1 else 2
-            for gi, (name, its) in enumerate(self.bento_groups(items)):
-                rows, slots = BENTO[name]
-                roles = [s[0] for s in slots]
-                # мобильная раскладка: 2 колонки; одиночный вертикальный / нечётный малый кадр — на всю ширину
-                pidx = [k for k, r in enumerate(roles) if r in ("p", "ps")]
-                sidx = [k for k, r in enumerate(roles) if r == "ls"]
-                parts = []
-                for k, (x, (role, _o, area)) in enumerate(zip(its, slots)):
-                    if role in ("p", "ps"):
-                        single = len(pidx) % 2 == 1 and k == pidx[0]
-                        ms, mr = (2, "4/5") if single else (1, "2/3")
-                    elif role == "ls":
-                        single = len(sidx) % 2 == 1 and k == sidx[0]
-                        ms, mr = (2, "3/2") if single else (1, "1/1")
-                    else:
-                        ms, mr = 2, "3/2"
-                    c0, c1 = [int(v) for v in area.split("/")[1::2]]
-                    vw = round((c1 - c0) / 12 * 100)
-                    sizes = "(min-width: 700px) {}vw, {}vw".format(vw, 100 if ms == 2 else 50)
-                    cls = "ph"
-                    if ms == 2 and labs < 2:
-                        cls, labs = "ph ph--lab", labs + 1
-                    parts.append(self.ph(x, group, "--a:{};--ms:{};--mr:{}".format(area, ms, mr), sizes, dl=(k % 3) * 80, cls=cls))
-                gs.append('<div class="bento__g bento__g--{}" style="--rows:{}">{}</div>'.format(name, rows, "".join(parts)))
-            body = '<div class="bento">{}</div>'.format("".join(gs))
+        note = self.md(b["solo_note"], b["_w"]) if b.get("solo_note") else ""
+        body = self.gallery_body(items, group, layout, solo_note=note)
         end = ""
         e = b.get("end")
         if isinstance(e, dict):
@@ -1277,6 +1598,138 @@ class PageCtx:
             txt = '<p>{}</p>'.format(self.md(e["text"], b["_w"] + ".end")) if e.get("text") else ""
             end = '<div class="gal__end" data-rv>{}{}</div>'.format(txt, link)
         return self.section(b, body + end, cls="b-gallery--" + layout)
+
+    # ------------------------------------------------------------------ albums (сетка альбомов съёмок жанра, бриф v3 §3)
+    def album_genre(self, b):
+        g = b.get("genre")
+        if isinstance(g, str):
+            return g
+        return self.genre["key"] if self.genre else None
+
+    def album_list(self, b, report=False):
+        """Альбомы блока: жанр страницы (или поле genre), порядок — как в content/albums.json или по списку items
+        (slug альбомов), limit — сколько показать. report=True — с сообщениями в отчёт страницы."""
+        w = b.get("_w", "albums")
+        gk = self.album_genre(b)
+        if gk not in self.site.genre_by_key:
+            if report:
+                self.rep.err(w + ".genre", "укажите genre (ключ жанра) — на странице «{}» жанра нет".format(self.slug)
+                             if gk is None else "нет жанра «{}» (есть: {})".format(gk, ", ".join(self.site.genre_by_key)))
+            return []
+        albums = self.site.genre_albums(gk)
+        if report and self.site.album_bad.get(gk):
+            self.rep.warn(w, "альбомы {} с ошибками не выводятся — проверьте: python3 build.py --check content/albums.json".format(
+                ", ".join(self.site.album_bad[gk])))
+        items = b.get("items")
+        if isinstance(items, list) and items:
+            by = {al["key"]: al for al in albums}
+            picked = []
+            for i, s in enumerate(items):
+                s = s.strip("/").rsplit("/", 1)[-1] if isinstance(s, str) else s
+                if s in by and by[s] not in picked:
+                    picked.append(by[s])
+                elif report:
+                    self.rep.warn("{}.items[{}]".format(w, i), "альбома «{}» в жанре {} нет — пропущен".format(s, gk))
+            albums = picked
+        if isinstance(b.get("limit"), int):
+            albums = albums[:b["limit"]]
+        return albums
+
+    def album_meta(self, al, genre=True):
+        """Мета альбома: «Свадьба · 2025 · 48 кадров». Год — если есть; число кадров — от ALBUM_MIN_COUNT_SHOWN."""
+        n = len(al["frames"])
+        parts = [al["g"].get("single") or al["g"]["name"]] if genre else []
+        if al.get("year"):
+            parts.append(str(al["year"]))
+        if n >= ALBUM_MIN_COUNT_SHOWN:
+            parts.append("{} {}".format(n, plural(n, "кадр", "кадра", "кадров")))
+        return parts
+
+    def album_card_cover(self, al):
+        """Обложка карточки на странице жанра: cover альбома, но не тот же кадр, что стоит в первом экране страницы
+        (иначе один снимок идёт дважды подряд) — тогда следующий кадр альбома. У альбома из одного кадра выбора нет."""
+        c = al["cover"]
+        if photo_key(c["_p"]) in self.auto_excl:
+            alt = next((f for f in al["frames"] if photo_key(f["_p"]) not in self.auto_excl), None)
+            if alt:
+                return alt
+        return c
+
+    def b_albums(self, b):
+        """Карточки-«окна» съёмок: обложка в рамке, название, мета «Жанр · год · N кадров». Клик — страница альбома
+        /<жанр>/<альбом>/ (со шторкой перехода). Наведение — кадр чуть приближается внутри рамки (1.04), без плашек.
+        Колонки: 1 альбом — широкая карточка (обложка + текст рядом), 2 и 4 — две колонки, 3 и от 5 — три; телефон — одна.
+        Пропорция обложек одна на сетку: 4:5, если вертикальных обложек больше, иначе 3:2 (поле ratio — вручную).
+        Без «дырок» в последнем ряду трёх колонок (сетка на 6 долей, карточка — 2 доли): при 3:2 и 1:1 хвост из двух
+        карточек растягивается на половину ширины каждая (5 → 3 + 2, 7 → 3 + 2 + 2); при 4:5 половина ширины вытянула бы
+        портреты на весь экран — хвост того же размера встаёт по центру (5 → 3 + 2 по центру, 7 → 3 + 3 + 1 по центру).
+        На планшете (2 колонки) нечётная последняя карточка — на всю строку, обложка и текст рядом."""
+        w = b["_w"]
+        albums = self.album_list(b, report=True)
+        if not albums:
+            if self.album_genre(b) in self.site.genre_by_key:
+                self.rep.warn(w, "у жанра {} нет альбомов в content/albums.json — блок пропущен".format(self.album_genre(b)))
+            return ""
+        b.setdefault("title", "Съёмки")
+        n = len(albums)
+        cols = b.get("columns")
+        if cols not in (None, 1, 2, 3):
+            self.rep.warn(w, "columns бывает 1, 2 или 3")
+            cols = None
+        if cols is None:
+            cols = 1 if n == 1 else (3 if n == 3 or n >= 5 else 2)
+        covers = [self.album_card_cover(al) for al in albums]
+        ratio = b.get("ratio")
+        if ratio not in (None, "3/2", "4/5", "1/1"):
+            self.rep.warn(w, "ratio бывает 3/2, 4/5 или 1/1")
+            ratio = None
+        if ratio is None:
+            portraits = sum(1 for c in covers if self.orient(c["_p"]) == "P")
+            ratio = "4/5" if portraits > n - portraits else "3/2"
+        one = cols == 1 and n == 1
+        # хвост последнего ряда при трёх колонках: {индекс: класс}. al__i--h — половина ширины (span 3 из 6),
+        # al__i--c2 / al__i--c3 — та же треть, но со сдвигом к центру (со 2-й или 3-й доли из 6)
+        tail = {}
+        if cols == 3 and n > 3 and n % 3:
+            k = n % 3
+            if ratio == "4/5":
+                if k == 2:
+                    tail = {n - 2: "al__i--c2"}
+                else:
+                    tail = {n - 1: "al__i--c3"}
+            else:
+                tail = {i: "al__i--h" for i in range(n - (2 if k == 2 else 4), n)}
+        # две колонки (планшет или columns: 2) и нечётное число — последняя карточка на всю строку, обложка и текст рядом
+        odd_last = n - 1 if cols in (2, 3) and n % 2 and n > 1 else None
+        lis = []
+        for i, (al, c) in enumerate(zip(albums, covers)):
+            p = c["_p"]
+            self.gallery_photos.append(p)
+            href = self.slug_href(al["slug"])
+            meta = " · ".join(self.t(x) for x in self.album_meta(al))
+            if one:
+                r = "4/5" if self.orient(p) == "P" else "3/2"
+                sizes = "(min-width: 900px) {}vw, calc(100vw - 32px)".format(40 if r == "4/5" else 56)
+            else:
+                r = ratio
+                sizes = {3: "(min-width: 1100px) 31vw, (min-width: 700px) 47vw, calc(100vw - 32px)",
+                         2: "(min-width: 700px) 47vw, calc(100vw - 32px)"}.get(cols, "calc(100vw - 32px)")
+                if tail.get(i) == "al__i--h":
+                    sizes = "(min-width: 700px) 47vw, calc(100vw - 32px)"
+            st = ";".join(s for s in (self.focus_vars(c.get("focus") or p.get("focus")), "--r:{}".format(r)) if s)
+            fig = '<span class="al__fig" style="{}">{}</span>'.format(esc(st), self.img(p, sizes, alt=p.get("alt", "")))
+            extra = ""
+            if one:
+                sub = '<span class="al__sub">{}</span>'.format(self.t(al["subtitle"])) if al.get("subtitle") else ""
+                extra = sub + '<span class="al__go" aria-hidden="true">Смотреть съёмку →</span>'
+            ic = " ".join(x for x in ("al__i", tail.get(i, ""), "al__i--last" if i == odd_last else "") if x)
+            lis.append(('<li class="{ic}" data-rv style="--dl:{dl}ms"><a class="al__a" href="{h}">{fig}'
+                        '<span class="al__txt"><h3 class="al__t">{t}</h3><span class="al__meta mono">{m}</span>{x}</span></a></li>').format(
+                ic=ic, dl=(i % cols) * 90, h=esc(href), fig=fig, t=self.t(al["title"]), m=meta, x=extra))
+        cls = "al al--one" + (" al--one-p" if self.orient(covers[0]["_p"]) == "P" else "") if one else "al al--c{}".format(cols)
+        inner = '<ul class="{}">{}</ul>'.format(cls, "".join(lis))
+        self.rep.note("{}: альбомов {} — {}".format(w, n, ", ".join(al["key"] for al in albums)))
+        return self.section(b, inner, style="l")
 
     # ------------------------------------------------------------------ stats (опыт в цифрах)
     def b_stats(self, b):
@@ -1317,6 +1770,9 @@ class PageCtx:
 
     # ------------------------------------------------------------------ cases (задача → решение → результат)
     def b_cases(self, b):
+        """v3 «аккуратнее»: простая сетка карточек (2 колонки на десктопе, 1 на телефоне) — обложка 3:2, название,
+        2–3 метки строкой, три короткие строки Задача / Решение / Результат, ссылка. Без стопки, затемнения,
+        счётчиков «01 / 04» и свёрнутых блоков."""
         w = b["_w"]
         lis = []
         items = b.get("items") or []
@@ -1326,35 +1782,32 @@ class PageCtx:
                 self.rep.err(wi, "кейс — объект {photo, title, tags[], task, solution, result, link?}")
                 continue
             p = self.photo(it.get("photo"), wi + ".photo") if "photo" in it else None
-            tags = "".join("<li>{}</li>".format(self.t(x)) for x in (it.get("tags") or []))
+            tags = it.get("tags") or []
+            if len(tags) > 3:
+                self.rep.warn(wi, "в кейсе лучше 2–3 метки (сейчас {})".format(len(tags)))
+            tags_html = '<ul class="cs__tags mono" aria-label="Факты">{}</ul>'.format(
+                "".join("<li>{}</li>".format(self.t(x)) for x in tags)) if tags else ""
             fig = ""
             if p:
                 self.has_lb = True
                 self.gallery_photos.append(p)
                 fig = '<figure class="cs__fig" style="{}"><a class="ph__a" href="{}" data-lb="cases" data-cap="{}">{}</a></figure>'.format(
                     esc(self.focus_vars(it.get("focus") or p.get("focus"))), esc(self.purl(p["large"])),
-                    esc(self.lb_cap(p)), self.img(p, "(min-width: 900px) 50vw, 100vw"))
+                    esc(strip_md(it["title"])),
+                    self.img(p, "(min-width: 900px) 46vw, calc(100vw - 32px)"))
             link = ""
             if isinstance(it.get("link"), dict) and it["link"].get("href"):
                 href = self.link(it["link"]["href"], wi + ".link")
                 link = '<a class="ulink cs__link" href="{}"{}>{}</a>'.format(esc(href), self.dt_attr(href), self.t(it["link"].get("label", "Смотреть кадры →")))
             row = lambda k, lab, cls="": '<div class="cs__row{}"><dt class="mono">{}</dt><dd>{}</dd></div>'.format(
                 cls, lab, self.md(it[k], wi + "." + k, nw=True))
-            # «Задача» и «Решение» — в <details>: на десктопе раскрыты всегда (summary скрыт), на телефоне свёрнуты
-            # в «Задача и решение ↓», чтобы на виду остались метки, кадр и результат. Без JS — раскрыты везде.
-            more = ('<details class="cs__more" open><summary class="cs__sum mono"><span>Задача и{n}решение</span>'
-                    '<span class="cs__ic" aria-hidden="true"></span></summary><dl class="cs__dl">{a}{b}</dl></details>').format(
-                n=NBSP, a=row("task", "Задача"), b=row("solution", "Решение"))
-            res = '<dl class="cs__dl cs__dl--res">{}</dl>'.format(row("result", "Результат", " cs__row--res"))
-            # счётчик «01 / 04» — только когда кейсов несколько; «01 / 01» — технический шум
-            no = '<span class="cs__no mono">{:02d} / {:02d}</span>'.format(i + 1, len(items)) if len(items) > 1 else ""
-            # кейс без кадра: текст на всю ширину карточки, без пустого слота под фото
-            lis.append(('<li class="cs__i" style="--i:{i}"><article class="cs__card{nf}" aria-labelledby="{sid}-{i}">'
-                        '<header class="cs__head">{no}<h3 class="cs__t" id="{sid}-{i}">{title}</h3>'
-                        '<ul class="cs__tags mono" aria-label="Факты">{tags}</ul></header>'
-                        '<div class="cs__body">{fig}<div class="cs__txt">{more}{res}{link}</div></div></article></li>').format(
-                i=i, nf="" if fig else " cs__card--nophoto", sid=b["_id"], no=no, title=self.md(it["title"], wi), tags=tags, fig=fig,
-                more=more, res=res, link=link))
+            dl = '<dl class="cs__dl">{}{}{}</dl>'.format(row("task", "Задача"), row("solution", "Решение"),
+                                                         row("result", "Результат", " cs__row--res"))
+            lis.append(('<li class="cs__i" data-rv style="--dl:{dl}ms"><article class="cs__card{nf}" aria-labelledby="{sid}-{i}">{fig}'
+                        '<header class="cs__head"><h3 class="cs__t" id="{sid}-{i}">{title}</h3>{tags}</header>'
+                        '{dlist}{link}</article></li>').format(
+                dl=(i % 2) * 90, i=i, nf="" if fig else " cs__card--nophoto", sid=b["_id"], fig=fig,
+                title=self.md(it["title"], wi), tags=tags_html, dlist=dl, link=link))
         inner = '<ol class="cs{}">{}</ol>'.format(" cs--one" if len(lis) == 1 else "", "".join(lis))
         return self.section(b, inner, style="xl")
 
@@ -1399,8 +1852,9 @@ class PageCtx:
             if not isinstance(it, dict) or not it.get("title"):
                 self.rep.err(wi, "пункт — объект {\"title\": …, \"text\": …}")
                 continue
-            lis.append('<li class="pt__i" data-rv style="--dl:{}ms"><span class="pt__n mono">{:02d}</span><h3 class="pt__t">{}</h3>{}</li>'.format(
-                i * 90, i + 1, self.md(it["title"], wi), "<p>{}</p>".format(self.md(it.get("text", ""), wi)) if it.get("text") else ""))
+            # v3: без номеров 01–03 — тонкая линия сверху, заголовок пункта и строка текста
+            lis.append('<li class="pt__i" data-rv style="--dl:{}ms"><h3 class="pt__t">{}</h3>{}</li>'.format(
+                i * 90, self.md(it["title"], wi), "<p>{}</p>".format(self.md(it.get("text", ""), wi)) if it.get("text") else ""))
         if not 2 <= len(items) <= 4:
             self.rep.warn(b["_w"], "в points лучше 3 пункта (сейчас {})".format(len(items)))
         inner = '<ol class="pt" style="--n:{}">{}</ol>'.format(max(1, len(lis)), "".join(lis))
@@ -1441,8 +1895,8 @@ class PageCtx:
                 continue
             a = it["a"] if isinstance(it["a"], list) else [it["a"]]
             self.faq.append((strip_md(it["q"]), " ".join(strip_md(x) if isinstance(x, str) else " ".join(map(strip_md, x)) for x in a)))
-            out.append('<details class="faq__i"{}><summary><span class="faq__n mono" aria-hidden="true">{:02d}</span><h3 class="faq__q">{}</h3><span class="faq__ic" aria-hidden="true"></span></summary><div class="faq__a"><div class="faq__ai">{}</div></div></details>'.format(
-                " open" if it.get("open") else "", i + 1, self.md(it["q"], wi), self.paras(a, wi + ".a")))
+            out.append('<details class="faq__i"{}><summary><h3 class="faq__q">{}</h3><span class="faq__ic" aria-hidden="true"></span></summary><div class="faq__a"><div class="faq__ai">{}</div></div></details>'.format(
+                " open" if it.get("open") else "", self.md(it["q"], wi), self.paras(a, wi + ".a")))
         if not 3 <= len(items) <= 8:
             self.rep.warn(b["_w"], "в FAQ лучше 5–6 вопросов (сейчас {})".format(len(items)))
         head = self.sh(b, "l")
@@ -1519,7 +1973,7 @@ class PageCtx:
                 self.rep.err(w, "укажите review (id отзыва) или text")
                 return ""
             text, author, cap = b["text"], b.get("author", ""), b.get("cap", "")
-        tag = '<p class="tag"><i class="lamp" aria-hidden="true"></i><span>{}</span></p>'.format(self.t(b["eyebrow"])) if b.get("eyebrow") else ""
+        tag = '<p class="tag"><span>{}</span></p>'.format(self.t(b["eyebrow"])) if b.get("eyebrow") else ""
         fc = '<figcaption><b>{}</b>{}</figcaption>'.format(
             self.t(author), '<span class="mono">{}</span>'.format(self.t(cap)) if cap else "") if (author or cap) else ""
         inner = '<figure class="bq" data-rv>{}<blockquote><p>«{}»</p></blockquote>{}</figure>'.format(tag, self.md(str(text).strip("«»"), w), fc)
@@ -1549,20 +2003,17 @@ class PageCtx:
 
     # ------------------------------------------------------------------ lead-form → CTA-полоса «Обсудим съёмку» (без формы)
     def b_lead_form(self, b):
-        """Финальная CTA-полоса на safelight-градиенте: огромная ссылка на Telegram-ник. Форм на сайте нет:
-        все кнопки ведут в Telegram (config.json → contacts.telegram / telegram_handle). id блока — «zayavka»."""
+        """Финальная CTA-полоса: заголовок секции (как у всех, одного веса, не на всю ширину) + строка-лид, ниже на
+        safelight-градиенте — плашка-ссылка с ником Telegram. Форм на сайте нет: все кнопки ведут в Telegram
+        (config.json → contacts.telegram / telegram_handle). id блока — «zayavka». v3: без метки-«лампы» и правой
+        мета-подписи над заголовком (поля eyebrow и meta допустимы, но не выводятся)."""
         w = b["_w"]
         c = self.cfg["contacts"]
         tg, handle = c["telegram"], c.get("telegram_handle", "Telegram")
         b.setdefault("title", "Обсудим съёмку")
-        b.setdefault("eyebrow", "Telegram")
-        meta = b.get("meta") or "Стоимость — по запросу"
-        lead = '<p class="lf__lead">{}</p>'.format(self.md(b.get("lead", "Напишите в Telegram: дата, площадка, формат — остальное обсудим в переписке."), w + ".lead"))
-        chs, _ = self.letters(strip_md(b["title"]), gen=True)
-        head = ('<div class="lf__top" data-rv><p class="tag"><i class="lamp" aria-hidden="true"></i><span>{eb}</span></p><span class="mono">{meta}</span></div>'
-                '<h2 class="lf__t" id="h-{id}" data-fit data-rv style="--n:{n}"><span class="lf__in" aria-hidden="true">{t}</span><span class="vh">{tt}</span></h2>{lead}').format(
-            eb=self.t(b["eyebrow"]), meta=self.md(meta, w), id=b["_id"], t=chs, tt=self.t(strip_md(b["title"])), lead=lead,
-            n=len(strip_md(b["title"])))
+        lead = self.md(b.get("lead", "Напишите в Telegram: дата, площадка, формат — остальное обсудим в переписке."), w + ".lead")
+        head = ('<header class="sh sh--xl lf__head" data-rv><h2 class="sh__t sh__t--xl" id="h-{id}"><span class="mk"><span>{t}</span></span></h2>'
+                '<p class="sh__note lf__lead">{lead}</p></header>').format(id=b["_id"], t=self.md(b["title"], w + ".title"), lead=lead)
         band = ('<a class="lf__tg" href="{tg}" target="_blank" rel="noopener" data-cta="tg" aria-label="{al}">'
                 '<span class="lf__tg-cap mono"><span>{btn}</span><span>Telegram</span></span>'
                 '<span class="lf__tg-h">{h}</span><span class="lf__tg-arr" aria-hidden="true">↗</span></a>').format(
@@ -1607,8 +2058,9 @@ class PageCtx:
         lis = []
         for i, g in enumerate(self.site.genres):
             cur = ' aria-current="page"' if g["slug"] == self.slug else ""
-            lis.append('<li style="--i:{i}"><a href="{h}"{c}><span class="menu__no mono">{no:02d}</span><span class="menu__w">{nm}</span></a></li>'.format(
-                i=i, h=esc(self.slug_href(g["slug"])), c=cur, no=i + 1, nm=self.t(g["name"])))
+            # v3: как список направлений — без номеров, слово приглушено, наведение/фокус — лёгкое увеличение и полная яркость
+            lis.append('<li style="--i:{i}"><a href="{h}"{c}><span class="menu__w">{nm}</span></a></li>'.format(
+                i=i, h=esc(self.slug_href(g["slug"])), c=cur, nm=self.t(g["name"])))
         extra = []
         for s in cfg["menu_extra"]:
             cur = ' aria-current="page"' if s == self.slug else ""
@@ -1745,7 +2197,7 @@ class PageCtx:
             person,
         ]
         ptype = {"/about/": "AboutPage", "/contacts/": "ContactPage"}.get(self.slug) or (
-            "CollectionPage" if self.type == "genre" else "WebPage")
+            "CollectionPage" if self.type in ("genre", "album") else "WebPage")
         page = {"@type": ptype, "@id": url + "#webpage", "url": url,
                 "name": self.full_title(), "description": self.d.get("description", ""), "inLanguage": "ru",
                 "isPartOf": {"@id": site_id}, "about": {"@id": biz_id}, "dateModified": self.site.today.isoformat()}
@@ -1771,21 +2223,40 @@ class PageCtx:
         if (self.type == "genre" or "ImageGallery" in schema) and self.gallery_photos:
             uniq, seen = [], set()
             for p in self.gallery_photos:
-                if p["id"] not in seen:
-                    seen.add(p["id"])
+                if photo_key(p) not in seen:
+                    seen.add(photo_key(p))
                     uniq.append(p)
-            graph.append({"@type": "ImageGallery", "@id": url + "#gallery", "name": "{} — кадры".format(self.nav_label()),
-                          "url": url, "creator": {"@id": person_id},
-                          "associatedMedia": [self.image_obj(p) for p in uniq[:40]]})
+            gal = {"@type": "ImageGallery", "@id": url + "#gallery", "name": self.gallery_name(),
+                   "url": url, "creator": {"@id": person_id}, "isPartOf": {"@id": url + "#webpage"},
+                   "associatedMedia": [self.image_obj(p) for p in uniq[:self.gallery_ld_max()]]}
+            gal.update(self.gallery_ld_extra())
+            graph.append(gal)
         if self.faq:
             graph.append({"@type": "FAQPage", "@id": url + "#faq", "mainEntity": [
                 {"@type": "Question", "name": q, "acceptedAnswer": {"@type": "Answer", "text": a}} for q, a in self.faq]})
         data = {"@context": "https://schema.org", "@graph": graph}
         return json.dumps(data, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
 
+    def gallery_name(self):
+        return "{} — кадры".format(self.nav_label())
+
+    def gallery_ld_max(self):
+        return 40
+
+    def gallery_ld_extra(self):
+        return {}
+
+    @staticmethod
+    def large_size(p):
+        """Размер варианта large: у кадров из photos.json — 1920 по ширине, у локальных кадров альбома — фактический."""
+        if p.get("_lw"):
+            return p["_lw"], p["_lh"]
+        return 1920, round(1920 * p["h"] / p["w"])
+
     def image_obj(self, p, iid=None):
-        o = {"@type": "ImageObject", "contentUrl": self.aurl(p["large"]), "url": self.aurl(p["large"]), "width": 1920,
-             "height": round(1920 * p["h"] / p["w"]), "caption": p.get("alt", ""), "creator": {"@id": self.site.su + "/#person"},
+        lw, lh = self.large_size(p)
+        o = {"@type": "ImageObject", "contentUrl": self.aurl(p["large"]), "url": self.aurl(p["large"]), "width": lw,
+             "height": lh, "caption": p.get("alt", ""), "creator": {"@id": self.site.su + "/#person"},
              "creditText": self.cfg["brand"], "copyrightNotice": "© {}, {}".format(self.cfg["brand"], self.cfg["person"]["name"])}
         if iid:
             o["@id"] = iid
@@ -1799,9 +2270,10 @@ class PageCtx:
         robots = '<meta name="robots" content="noindex, follow">' if d.get("noindex") else ""
         og_img = ""
         if og:
-            og_img = ('<meta property="og:image" content="{u}"><meta property="og:image:width" content="1920">'
+            ow, oh = self.large_size(og)
+            og_img = ('<meta property="og:image" content="{u}"><meta property="og:image:width" content="{w}">'
                       '<meta property="og:image:height" content="{h}"><meta property="og:image:alt" content="{a}">'
-                      '<meta name="twitter:image" content="{u}">').format(u=esc(self.aurl(og["large"])), h=round(1920 * og["h"] / og["w"]), a=esc(og.get("alt", "")))
+                      '<meta name="twitter:image" content="{u}">').format(u=esc(self.aurl(og["large"])), w=ow, h=oh, a=esc(og.get("alt", "")))
         preload = ""
         if self.hero_photo:
             p = self.hero_photo
@@ -1894,7 +2366,7 @@ class PageCtx:
     def render(self):
         self.prepare()
         self.validate_page()
-        blocks = [b for b in self.d.get("blocks", []) if isinstance(b, dict) and b.get("type") in BLOCK_SPECS]
+        blocks = [b for b in self.d.get("blocks", []) if isinstance(b, dict) and (b.get("type") in BLOCK_SPECS or self.internal(b.get("type")))]
         parts, useful, visible = [], [], []
         for b in blocks:
             try:
@@ -1914,7 +2386,7 @@ class PageCtx:
         count = lambda xs: len(re.sub(r"\s+", " ", " ".join(strip_md(x) for x in xs)).strip())
         chars, vis = count(useful), count(visible)
         self.rep.note("полезного текста: {} знаков с пробелами, из них на виду (без раскрываемого seo-text): {}".format(chars, vis))
-        self.rep.note("блоков: {}, кадров: {}, вопросов FAQ: {}".format(len(blocks), len({p['id'] for p in self.gallery_photos}), len(self.faq)))
+        self.rep.note("блоков: {}, кадров: {}, вопросов FAQ: {}".format(len(blocks), len({photo_key(p) for p in self.gallery_photos}), len(self.faq)))
         if self.type == "home" and vis > 1600:
             self.rep.warn("", "на главной на виду {} знаков текста — фотографа оценивают глазами, держите до ~1500".format(vis))
         self.chars = chars
@@ -1932,6 +2404,171 @@ class PageCtx:
             type=esc(self.type or "page"), pt=self.curtain(), n=NBSP, hdr=self.header(), main=main, ftr=self.footer(),
             lb=self.lightbox() if self.has_lb else "")
         return self.head() + body
+
+
+# =============================================================================
+# Страница альбома /<жанр>/<альбом>/ (бриф v3 §3) — собирается из content/albums.json, JSON-страницы у неё нет
+# =============================================================================
+
+def album_title(site, al):
+    """<title> альбома: «Иван и Анна — свадьба в Новосибирске — Александр Непомнящих» (≤ TITLE_MAX знаков).
+    Если жанр уже есть в названии («Выпускной 11 класса», «Портрет у окна») — «<Название>, Новосибирск — …».
+    Длинное — короткий хвост бренда, затем без жанра, затем название сокращается."""
+    t = re.sub(r"\s+", " ", al["title"]).strip()
+    cfg = site.cfg
+    single = (al["g"].get("single") or al["g"]["name"]).lower()
+    stem = single.split()[0][:6]
+    heads = []
+    if stem not in t.lower():
+        heads.append("{} — {} в {}".format(t, single, cfg.get("city_in", cfg["city"])))
+    heads += ["{}, {}".format(t, cfg["city"]), t]
+    for h in heads:
+        for suf in (TITLE_SUFFIX, TITLE_SUFFIX_SHORT):
+            if len(h + suf) <= TITLE_MAX:
+                return h + suf
+    return t[:TITLE_MAX - len(TITLE_SUFFIX_SHORT) - 1].rstrip() + "…" + TITLE_SUFFIX_SHORT
+
+
+def album_description(site, al, service=""):
+    """description альбома (110–170 знаков), если в albums.json не задан свой: название + подзаголовок, услуга жанра
+    в городе и число кадров, имя фотографа, Telegram — сколько поместится."""
+    if al.get("description"):
+        return al["description"].strip()
+    cfg = site.cfg
+    n = len(al["frames"])
+    sub = re.sub(r"\s*·\s*", ", ", al.get("subtitle") or "").strip(" ,.")
+    head = "{}. {}.".format(al["title"].rstrip("."), sub[0].upper() + sub[1:]) if sub else al["title"].rstrip(".") + "."
+    svc = service or "Фотосъёмка: {}".format((al["g"].get("single") or al["g"]["name"]).lower())
+    what = "{} в {}".format(svc, cfg.get("city_in", cfg["city"]))
+    if al.get("year"):
+        what += ", {}".format(al["year"])
+    if n >= ALBUM_MIN_COUNT_SHOWN:
+        what += " — {} {}".format(n, plural(n, "кадр", "кадра", "кадров"))
+    parts = [head, what + ".", "Фотограф {}.".format(cfg["person"]["name"]), "Обсудить съёмку — в Telegram."]
+    out = parts[0]
+    for p in parts[1:]:
+        if len(out + " " + p) <= 170:
+            out += " " + p
+    if len(out) > 170:
+        out = out[:168].rsplit(" ", 1)[0].rstrip(",.:;—- ") + "…"
+    return out
+
+
+class AlbumCtx(PageCtx):
+    """Страница альбома: крошки «Главная / Жанр / Альбом», заголовок, мета, подзаголовок и текст (если есть),
+    галерея всех кадров с лайтбоксом (один кадр — крупно, целиком), «← Все съёмки жанра» и «Следующий альбом →»
+    (по кругу внутри жанра), CTA-полоса Telegram (lead-form с заголовком и строкой со страницы жанра).
+    SEO: свой title и description, canonical, JSON-LD CollectionPage + ImageGallery (все кадры) + BreadcrumbList, sitemap."""
+
+    def __init__(self, site, al, rep):
+        self.album = al
+        g = al["g"]
+        gp = site.pages.get(g["slug"], {}).get("data", {})
+        lf = next((b for b in gp.get("blocks", []) if isinstance(b, dict) and b.get("type") == "lead-form"), {})
+        lead_form = {k: v for k, v in lf.items() if k in ("title", "lead", "button", "contacts", "note")}
+        lead_form["type"] = "lead-form"
+        data = {"slug": al["slug"], "type": "album", "genre": al["genre"], "nav": al["title"], "parent": g["slug"],
+                "title": album_title(site, al), "description": album_description(site, al, gp.get("service", "")),
+                "h1": al["title"], "schema": ["ImageGallery"],
+                "blocks": [{"type": "album-hero"}, {"type": "album-gallery"}, {"type": "album-nav"}, lead_form]}
+        super().__init__(site, "album", data, rep)
+        self.genre_page = gp
+
+    def internal(self, t):
+        return t in INTERNAL_BLOCKS
+
+    def validate_page(self):
+        # альбом уже проверен при чтении content/albums.json (Site.load_albums); здесь — только SEO-длины
+        ft, desc = self.full_title(), self.d["description"]
+        if len(ft) > TITLE_MAX:
+            self.rep.warn("title", "«{}» — {} знаков, держите до {}".format(ft, len(ft), TITLE_MAX))
+        if not 90 <= len(desc) <= 170:
+            self.rep.warn("description", "длина {} знаков — держите 110–170 (поле description в albums.json)".format(len(desc)))
+        if self.album["genre"] and self.album["g"]["slug"] not in self.site.pages:
+            self.rep.warn("", "страницы жанра {} нет — крошка и «Все съёмки» ведут в пустоту".format(self.album["g"]["slug"]))
+
+    def full_title(self):
+        return self.d["title"]
+
+    def lb_cap(self, p):
+        return self.album["title"]
+
+    def og_photo(self):
+        return self.album["cover"]["_p"]
+
+    def gallery_name(self):
+        return self.album["title"]
+
+    def gallery_ld_max(self):
+        return ALBUM_LD_MAX
+
+    def gallery_ld_extra(self):
+        o = {"description": self.d["description"], "genre": self.album["g"]["name"]}
+        if self.album.get("year"):
+            o["dateCreated"] = str(self.album["year"])
+        o["primaryImageOfPage"] = {"@id": self.url() + "#primaryimage"}
+        return o
+
+    def albums_anchor(self):
+        """id блока albums на странице жанра — «Все съёмки» ведут прямо к сетке."""
+        for b in self.genre_page.get("blocks", []):
+            if isinstance(b, dict) and b.get("type") == "albums":
+                return b.get("id") if isinstance(b.get("id"), str) else DEFAULT_IDS["albums"]
+        return ""
+
+    # ------------------------------------------------------------------ первый экран альбома
+    def b_album_hero(self, b):
+        """v3 «аккуратнее»: одна колонка слева — мета «Портрет · 8 кадров» над названием, название, подзаголовок строкой
+        под ним и текст (если есть). Правый угол пустой: крошки сверху, без разрозненных точек текста по краям."""
+        al = self.album
+        meta = " · ".join(self.t(x) for x in self.album_meta(al))
+        meta_html = '<p class="ah__meta mono">{}</p>'.format(meta) if meta else ""
+        side = []
+        if al.get("subtitle"):
+            side.append('<p class="ah__lead">{}</p>'.format(self.t(al["subtitle"])))
+        if al.get("text"):
+            side.append('<div class="ah__txt">{}</div>'.format(self.paras(al["text"], "albums.{}.text".format(al["key"]))))
+        side_html = '<div class="ah__side">{}</div>'.format("".join(side)) if side else ""
+        return ('<section class="ah" id="{id}" aria-labelledby="h1"><div class="wrap">'
+                '<div class="gh__top">{crumbs}</div>'
+                '<div class="ah__row">{meta}<h1 class="ah__h1" id="h1">{h1}</h1>{side}</div>'
+                '</div></section>').format(
+            id=b["_id"], crumbs=self.crumbs(), meta=meta_html,
+            h1=self.md(al["title"], "albums.{}.title".format(al["key"]), nw=True), side=side_html)
+
+    # ------------------------------------------------------------------ все кадры альбома
+    def b_album_gallery(self, b):
+        al = self.album
+        items = [dict(f) for f in al["frames"]]
+        n = len(items)
+        # один кадр — крупно и целиком (без пустой сетки), 2+ — бенто; первые кадры грузятся сразу: они под заголовком
+        body = self.gallery_body(items, "album", "solo" if n == 1 else "bento", eager=3 if n > 1 else 1)
+        h2 = '<h2 class="vh" id="h-{}">Кадры: {}</h2>'.format(b["_id"], self.t(al["title"]))
+        return ('<section class="sec b-gallery b-album-gallery b-gallery--{lay}" id="{id}" aria-labelledby="h-{id}">'
+                '<div class="wrap">{h2}{body}</div></section>').format(
+            lay="solo" if n == 1 else "bento", id=b["_id"], h2=h2, body=body)
+
+    # ------------------------------------------------------------------ «← Все съёмки жанра» и «Следующий альбом →»
+    def b_album_nav(self, b):
+        al = self.album
+        g = al["g"]
+        same = self.site.genre_albums(al["genre"])
+        k = next((i for i, x in enumerate(same) if x is al), 0)
+        nxt = same[(k + 1) % len(same)] if len(same) > 1 else None
+        back = ('<a class="an__a an__back" href="{h}"><span class="an__arr" aria-hidden="true">←</span>'
+                '<span class="an__txt"><span class="an__cap mono">Все съёмки жанра</span><span class="an__t">{t}</span></span></a>').format(
+            h=esc(self.slug_href(g["slug"], self.albums_anchor())), t=self.t(g["name"]))
+        nx = ""
+        if nxt:
+            c = nxt["cover"]["_p"]
+            th = '<span class="an__th" style="{}">{}</span>'.format(
+                esc(self.focus_vars(nxt["cover"].get("focus") or c.get("focus"))),
+                self.img(c, "(min-width: 700px) 120px, 72px", alt=""))
+            nx = ('<a class="an__a an__next" href="{h}"><span class="an__txt"><span class="an__cap mono">Следующий альбом</span>'
+                  '<span class="an__t">{t}</span></span>{th}<span class="an__arr" aria-hidden="true">→</span></a>').format(
+                h=esc(self.slug_href(nxt["slug"])), t=self.t(nxt["title"]), th=th)
+        return ('<nav class="an" id="{id}" aria-label="Другие съёмки"><div class="wrap"><div class="an__in{one}">{back}{nx}</div></div></nav>').format(
+            id=b["_id"], one="" if nx else " an__in--one", back=back, nx=nx)
 
 
 # =============================================================================
@@ -2109,6 +2746,24 @@ def build_page(site, slug):
     return html_out, rep, ctx
 
 
+def build_albums(site, genre=None):
+    """Страницы альбомов (все или одного жанра): [(slug, html, отчёт, ctx)]. Альбомы с ошибками в albums.json сюда
+    не попадают — их ошибки в отчёте site.album_rep."""
+    out = []
+    for al in site.albums:
+        if genre and al["genre"] != genre:
+            continue
+        rep = Report("{} → {}".format(site.album_rep.name, al["slug"]))
+        ctx = AlbumCtx(site, al, rep)
+        try:
+            html_out = ctx.render()
+        except Exception as e:  # ошибка одной страницы альбома не роняет сборку
+            rep.err("", "не удалось собрать страницу альбома: {}: {}".format(type(e).__name__, e))
+            html_out = ""
+        out.append((al["slug"], html_out, rep, ctx))
+    return out
+
+
 def cmd_check(site, path):
     path = Path(path)
     if not path.is_absolute():
@@ -2119,12 +2774,16 @@ def cmd_check(site, path):
         rep.err("", "файл не найден")
         rep.print()
         return 1
+    if path.name == ALBUMS_FILE.name:
+        return cmd_check_albums(site, path)
     try:
         data = load_json(path)
     except ValueError as e:
         rep.err("", str(e))
         rep.print()
         return 1
+    if isinstance(data, dict) and "albums" in data and "blocks" not in data:   # копия albums.json под другим именем
+        return cmd_check_albums(site, path)
     if not isinstance(data, dict):
         rep.err("", "файл должен содержать объект { ... }")
         rep.print()
@@ -2136,6 +2795,24 @@ def cmd_check(site, path):
     rep.print()
     print("Итог: {} ошибок, {} предупреждений. Ничего не записано.".format(len(rep.errors), len(rep.warnings)))
     return 1 if rep.errors else 0
+
+
+def cmd_check_albums(site, path):
+    """--check content/albums.json: жанры, slug, кадры (несуществующий id, чужой жанр, дубли, пустой альбом, нет файла),
+    обложки — и сборка каждой страницы альбома в памяти (ничего не записывается)."""
+    site.load_albums(path)
+    rep = site.album_rep
+    rep.print()
+    errs, warns = len(rep.errors), len(rep.warnings)
+    for slug, _html, r, _ctx in build_albums(site):
+        if r.errors or r.warnings:
+            r.print(verbose=False)
+        else:
+            print("OK   {}  «{}»".format(slug, _ctx.full_title()))
+        errs += len(r.errors)
+        warns += len(r.warnings)
+    print("Итог: {} ошибок, {} предупреждений, страниц альбомов: {}. Ничего не записано.".format(errs, warns, len(site.albums)))
+    return 1 if errs else 0
 
 
 def write(path, text):
@@ -2159,10 +2836,23 @@ def cmd_only(site, name):
     if rep.errors:
         print("Страница не записана: исправьте ошибки.")
         return 1
+    # жанровая страница: вместе с ней — страницы её альбомов (сетка на жанре ссылается на них)
+    albums = []
+    if info["data"].get("type") == "genre" and ctx.genre:
+        if site.album_rep.errors:
+            site.album_rep.print(verbose=False)
+        for aslug, ahtml, arep, _actx in build_albums(site, ctx.genre["key"]):
+            if arep.errors:
+                arep.print(verbose=False)
+                continue
+            albums.append((aslug, ahtml))
     OUT.mkdir(exist_ok=True)
     copy_assets()
     write(out_file(slug), html_out)
-    print("Записано: site/{}  (ассеты обновлены, остальные страницы не тронуты)".format(out_file(slug).relative_to(OUT)))
+    for aslug, ahtml in albums:
+        write(out_file(aslug), ahtml)
+    print("Записано: site/{}{}  (ассеты обновлены, остальные страницы не тронуты)".format(
+        out_file(slug).relative_to(OUT), " + страниц альбомов: {}".format(len(albums)) if albums else ""))
     print("Смотреть: http://127.0.0.1:8080/{}  или  site/{}".format("" if slug == "/" else slug.strip("/") + "/", out_file(slug).relative_to(OUT)))
     return 0
 
@@ -2199,8 +2889,27 @@ def cmd_build(site, strict=False):
         outputs[out_file(slug)] = html_out
         if not ctx.d.get("noindex"):
             ok_slugs.append(slug)
-    # дубли title/description
+    # альбомы: отчёт по content/albums.json и страницы /<жанр>/<альбом>/ (в sitemap — сразу после своего жанра)
+    reports.append(site.album_rep)
+    total_err += len(site.album_rep.errors)
+    album_slugs = {}
     seen_t, seen_d = {}, {}
+    for aslug, ahtml, arep, actx in build_albums(site):
+        reports.append(arep)
+        if arep.errors:
+            total_err += len(arep.errors)
+            continue
+        outputs[out_file(aslug)] = ahtml
+        album_slugs.setdefault(actx.album["g"]["slug"], []).append(aslug)
+        seen_t.setdefault(actx.full_title(), []).append(aslug)
+        seen_d.setdefault(actx.d["description"], []).append(aslug)
+    sitemap = []
+    for s in ok_slugs:
+        sitemap.append(s)
+        sitemap.extend(album_slugs.pop(s, []))
+    for rest in album_slugs.values():
+        sitemap.extend(rest)
+    # дубли title/description
     for slug, info in site.pages.items():
         t, dsc = info["data"].get("title"), info["data"].get("description")
         if t:
@@ -2232,12 +2941,14 @@ def cmd_build(site, strict=False):
     ht, nr = render_redirect_rules(site)
     write(OUT / ".htaccess", ht)
     write(OUT / "_redirects", nr)
-    write(OUT / "sitemap.xml", render_sitemap(site, ok_slugs))
+    write(OUT / "sitemap.xml", render_sitemap(site, sitemap))
     write(OUT / "robots.txt", render_robots(site))
     missing_links = check_site_links()
     pending = sorted(k for k in missing_links if k.endswith("/index.html") and "/" + k[:-len("index.html")] in site.registry)
     broken = sorted(k for k in missing_links if k not in pending)
-    print("\nСобрано страниц: {} из {} в карте сайта. Ошибок: {}.".format(len(outputs), len(site.registry), total_err))
+    n_alb = sum(1 for p in outputs if len(p.relative_to(OUT).parts) > 2)
+    print("\nСобрано страниц: {} из {} в карте сайта + страниц альбомов: {}. Ошибок: {}.".format(
+        len(outputs) - n_alb, len(site.registry), n_alb, total_err))
     if broken:
         print("БИТЫЕ ссылки в site/: " + "; ".join("{} (из {})".format(k, ", ".join(sorted(missing_links[k]))[:80]) for k in broken))
     if pending:

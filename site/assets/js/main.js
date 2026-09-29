@@ -1,9 +1,10 @@
-/* ANPhotoLab v2 «Проявочная» — поведение сайта. Без библиотек и без сети: работает и с file://, и на любом хостинге.
+/* ANPhotoLab v2 «Проявочная» (редакция v3 «аккуратнее») — поведение сайта. Без библиотек и без сети: работает и с file://,
+   и на любом хостинге.
    Модули: подгонка огромных слов под ширину, первый экран, лоадер «Проявка» и шторка переходов между страницами,
-   появления, шапка (прячет дубли имени и CTA на первом
-   экране, уезжает на жанрах), меню-оверлей, превью направлений за курсором (lerp), стопка кейсов, sticky-вкладки,
-   счётчики, бегущая строка, вопросы, «Подробнее о съёмке», лайтбокс, формы-заглушки → мессенджер, попап заявки,
-   «наверх». prefers-reduced-motion — всё статично. */
+   появления, шапка (прячет дубли имени и CTA на первом экране, уезжает на жанрах), меню-оверлей, sticky-вкладки,
+   счётчики, бегущая строка (блок marquee — если стоит на странице), вопросы, «Подробнее о съёмке», лайтбокс, «наверх».
+   v3: превью направлений за курсором и стопка кейсов удалены — направления и кейсы работают на чистом CSS
+   (наведение — лёгкое увеличение). Форм нет — все CTA ведут в Telegram. prefers-reduced-motion — всё статично. */
 (function () {
   'use strict';
   var d = document, root = d.documentElement;
@@ -11,7 +12,6 @@
   root.classList.add('js');
   var mm = function (q) { return window.matchMedia ? matchMedia(q).matches : false; };
   var reduce = mm('(prefers-reduced-motion: reduce)');
-  var fine = mm('(hover: hover) and (pointer: fine)');
   var $ = function (s, c) { return (c || d).querySelector(s); };
   var $$ = function (s, c) { return Array.prototype.slice.call((c || d).querySelectorAll(s)); };
   var raf = window.requestAnimationFrame || function (f) { return setTimeout(f, 16); };
@@ -332,120 +332,6 @@
     d.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && menu.classList.contains('is-open')) { setMenu(false); burger.focus(); }
     });
-  }
-
-  /* ---------- Направления: инверсная плашка + два кадра жанра, мягко следуют за курсором */
-  $$('[data-dir]').forEach(function (box) {
-    if (!fine) return;
-    var cards = $$('.dir__card', box), rows = $$('.dir__a', box);
-    if (!cards.length || !rows.length) return;
-    var imgs = cards.map(function (c) { return $$('img', c); });
-    var cL = $('.dir__card--l', box), cR = $('.dir__card--r', box);
-    var st = { on: false, y: 0, ty: 0, mx: 0, tmx: 0, run: false, maxL: 0, maxR: 0 };
-    /* карточки встают вплотную к краям активного слова, а не на фиксированном отступе от краёв экрана:
-       длинные «КОРПОРАТИВЫ» и «АВТОМОБИЛИ» они не перекрывают */
-    var cw0 = 0;
-    var place = function (a) {
-      var w = $('.dir__w', a), ref = cL || cR;
-      if (!w || !ref) return;
-      if (!cw0) cw0 = ref.offsetWidth;
-      var br = box.getBoundingClientRect(), wr = w.getBoundingClientRect();
-      var gap = Math.max(16, br.width * 0.016);
-      /* между подписями-категориями слева, словом и номерами справа: карточка не наезжает ни на что;
-         если места мало — становится уже (пропорция 3:4 сохраняется) */
-      var catR = 0, noL = br.width;
-      $$('.dir__cat', box).forEach(function (c) { var r = c.getBoundingClientRect(); if (r.width) catR = Math.max(catR, r.right - br.left); });
-      $$('.dir__no', box).forEach(function (c) { var r = c.getBoundingClientRect(); if (r.width) noL = Math.min(noL, r.left - br.left); });
-      var wl = wr.left - br.left, wrr = wr.right - br.left;
-      var room = Math.min(wl - gap - (catR ? catR + gap : 8), (noL < br.width ? noL - gap : br.width - 8) - (wrr + gap));
-      var cw = Math.max(96, Math.min(cw0, room));
-      cards.forEach(function (c) { c.style.width = cw.toFixed(1) + 'px'; });
-      var l = Math.max(8, wl - gap - cw), r = Math.min(br.width - cw - 8, wrr + gap);
-      if (cL) cL.style.left = l.toFixed(1) + 'px';
-      if (cR) { cR.style.left = r.toFixed(1) + 'px'; cR.style.right = 'auto'; }
-      /* запас хода за курсором — только до подписей и номеров */
-      st.maxL = Math.max(0, l - (catR ? catR + 8 : 4));
-      st.maxR = Math.max(0, (noL < br.width ? noL - 8 : br.width - 4) - (r + cw));
-    };
-    var setActive = function (i) {
-      cards.forEach(function (c, k) {
-        var has = false;
-        imgs[k].forEach(function (im) { var on = +im.getAttribute('data-i') === i; im.classList.toggle('is-on', on); if (on) has = true; });
-        c.classList.toggle('has-img', has);
-      });
-    };
-    var tick = function () {
-      var k = reduce ? 1 : 0.15;
-      st.y += (st.ty - st.y) * k;
-      st.mx += (st.tmx - st.mx) * (reduce ? 1 : 0.08);
-      var dy = st.ty - st.y, rot = Math.max(-6, Math.min(6, dy * 0.035));
-      cards.forEach(function (c, n) {
-        /* за курсором карточки двигаются только наружу (левая — влево, правая — вправо), не наезжая на слово */
-        var x = c === cL ? Math.max(-st.maxL, Math.min(0, st.mx * 90)) : Math.min(st.maxR, Math.max(0, st.mx * 90));
-        var y = st.y - c.offsetHeight / 2;
-        c.style.transform = 'translate3d(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px,0) rotate(' + (n ? rot : -rot).toFixed(2) + 'deg)';
-      });
-      if (Math.abs(dy) > 0.2 || Math.abs(st.tmx - st.mx) > 0.001) raf(tick); else st.run = false;
-    };
-    var kick = function () { if (!st.run) { st.run = true; raf(tick); } };
-    rows.forEach(function (a, i) {
-      a.addEventListener('mouseenter', function () {
-        place(a);
-        st.ty = a.offsetTop + a.offsetHeight / 2;
-        if (!st.on) { st.on = true; st.y = st.ty; box.classList.add('pv-on'); }
-        setActive(i); kick();
-      });
-    });
-    box.addEventListener('mousemove', function (e) {
-      var r = box.getBoundingClientRect();
-      st.tmx = (e.clientX - r.left) / r.width - 0.5; kick();
-    });
-    box.addEventListener('mouseleave', function () { st.on = false; box.classList.remove('pv-on'); kick(); });
-    /* прокрутка колесом без движения мыши: превью и плашка не «залипают» на старой строке —
-       на время скролла гасим их, после — находим строку под курсором заново */
-    var lx = -1, ly = -1, sT = 0;
-    addEventListener('mousemove', function (e) { lx = e.clientX; ly = e.clientY; }, { passive: true });
-    addEventListener('scroll', function () {
-      if (!st.on && !box.classList.contains('is-scrolling')) return;
-      box.classList.add('is-scrolling');
-      if (st.on) { st.on = false; box.classList.remove('pv-on'); kick(); }
-      clearTimeout(sT);
-      sT = setTimeout(function () {
-        box.classList.remove('is-scrolling');
-        if (lx < 0) return;
-        var el = d.elementFromPoint(lx, ly), a = el && el.closest ? el.closest('.dir__a') : null;
-        var i = rows.indexOf(a);
-        if (i < 0) return;
-        place(a);
-        st.ty = a.offsetTop + a.offsetHeight / 2; st.y = st.ty; st.on = true;
-        box.classList.add('pv-on'); setActive(i); kick();
-      }, 140);
-    }, { passive: true });
-  });
-
-  /* ---------- Кейсы. Десктоп: карточки ложатся стопкой, накрытая темнеет и чуть уменьшается.
-     Телефон: «Задача и решение» свёрнуты (без JS — раскрыты везде) */
-  var csList = $('.cs');
-  if (csList) {
-    var mores = $$('.cs__more', csList), narrow = window.matchMedia ? matchMedia('(max-width: 899px)') : null;
-    var syncMore = function () { var m = narrow && narrow.matches; mores.forEach(function (x) { x.open = !m; }); };
-    syncMore();
-    if (narrow) { if (narrow.addEventListener) narrow.addEventListener('change', syncMore); else if (narrow.addListener) narrow.addListener(syncMore); }
-    var cards = $$('.cs__i', csList);
-    if (cards.length > 1) {
-      var stackQ = window.matchMedia ? matchMedia('(min-width: 1100px) and (min-height: 760px)') : null, csTick = false;
-      var csUpd = function () {
-        csTick = false;
-        var on = stackQ && stackQ.matches;
-        cards.forEach(function (c, k) {
-          var nx = cards[k + 1], r = c.getBoundingClientRect();
-          /* темнеет, когда следующая карточка закрыла больше половины */
-          c.classList.toggle('is-under', !!(on && nx && nx.getBoundingClientRect().top < r.top + r.height * 0.5));
-        });
-      };
-      addEventListener('scroll', function () { if (!csTick) { csTick = true; raf(csUpd); } }, { passive: true });
-      addEventListener('resize', debounce(csUpd, 120)); csUpd();
-    }
   }
 
   /* ---------- Sticky-вкладки жанров: активная по центру, затухание краёв */
